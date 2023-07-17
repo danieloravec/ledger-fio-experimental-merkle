@@ -1,6 +1,18 @@
-# FIO Ledger App
+# Experimental FIO Ledger App
 
-FIO Ledger App for Ledger Nano S, Ledger Nano X, and Ledger Nano SPlus.
+Experimental FIO Ledger App for Ledger Nano S, that checks integrity of data after each step.
+
+### What is optimized in this app
+
+We have to decide whether we need to minimize the number of APDUs needed for
+transaction signing, or minimize the number of hash operation (`sha_256_add`, `sha_256_finalize`).
+As we experimented and got the following results, we will be trying to minimize the number of APDUs needed,
+as time for a hashing operation is negligible as compared to the time of an average APDU:
+
+`sha_256_init`:            0.000108
+`sha_256_add`:             0.000770
+`sha_256_finalize`:        0.001573
+`APDU on average`:         0.168625
 
 
 ## Building

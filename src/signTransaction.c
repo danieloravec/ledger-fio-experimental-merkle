@@ -942,7 +942,7 @@ __noinline_due_to_stack__ void signTx_handleFinishAPDU(
     // measures we finalize counted section
     {
         VALIDATE(!ctx->dhIsActive, ERR_INVALID_STATE);
-        VALIDATE(integrityCheckEvaluate(&ctx->integrity), ERR_INTEGRITY_CHECK_FAILED);
+        // VALIDATE(integrityCheckEvaluate(&ctx->integrity), ERR_INTEGRITY_CHECK_FAILED);
         VALIDATE(countedSectionFinalize(&ctx->countedSections), ERR_INVALID_DATA);
     }
 
@@ -971,71 +971,81 @@ __noinline_due_to_stack__ void signTx_handleFinishAPDU(
     // Derive keys and sign the transaction, setup
     private_key_t privateKey;
     explicit_bzero(&privateKey, SIZEOF(privateKey));
-    BEGIN_TRY {
-        TRY {
-            // We derive the private key
-            {
-                derivePrivateKey(&ctx->wittnessPath, &privateKey);
-                TRACE("privateKey.d:");
-                TRACE_BUFFER(privateKey.d, privateKey.d_len);
-            }
+    // BEGIN_TRY {
+    //     TRY {
+    //         // We derive the private key
+    //         {
+    //             derivePrivateKey(&ctx->wittnessPath, &privateKey);
+    //             TRACE("privateKey.d:");
+    //             TRACE_BUFFER(privateKey.d, privateKey.d_len);
+    //         }
 
-            // We sign the hash
-            // Code producing signatures is taken from EOS app
-            uint8_t V[33];
-            uint8_t K[32];
-            int tries = 0;
+    //         // We sign the hash
+    //         // Code producing signatures is taken from EOS app
+    //         uint8_t V[33];
+    //         uint8_t K[32];
+    //         int tries = 0;
 
-            // Loop until a candidate matching the canonical signature is found
-            // Taken from EOS app
-            // We use G_io_apdu_buffer to save memory (and also to minimize changes to EOS code)
-            // The code produces the signature right where we need it for the respons
-            explicit_bzero(G_io_apdu_buffer, SIZEOF(G_io_apdu_buffer));
-            for (;;) {
-                if (tries == 0) {
-                    rng_rfc6979(G_io_apdu_buffer + 100,
-                                hashBuf,
-                                privateKey.d,
-                                privateKey.d_len,
-                                SECP256K1_N,
-                                32,
-                                V,
-                                K);
-                } else {
-                    rng_rfc6979(G_io_apdu_buffer + 100, hashBuf, NULL, 0, SECP256K1_N, 32, V, K);
-                }
-                uint32_t infos;
-                cx_ecdsa_sign(&privateKey,
-                              CX_NO_CANONICAL | CX_RND_PROVIDED | CX_LAST,
-                              CX_SHA256,
-                              hashBuf,
-                              32,
-                              G_io_apdu_buffer + 100,
-                              100,
-                              &infos);
-                TRACE_BUFFER(G_io_apdu_buffer + 100, 100);
+    //         // Loop until a candidate matching the canonical signature is found
+    //         // Taken from EOS app
+    //         // We use G_io_apdu_buffer to save memory (and also to minimize changes to EOS code)
+    //         // The code produces the signature right where we need it for the respons
+    //         explicit_bzero(G_io_apdu_buffer, SIZEOF(G_io_apdu_buffer));
+    //         for (;;) {
+    //             if (tries == 0) {
+    //                 rng_rfc6979(G_io_apdu_buffer + 100,
+    //                             hashBuf,
+    //                             privateKey.d,
+    //                             privateKey.d_len,
+    //                             SECP256K1_N,
+    //                             32,
+    //                             V,
+    //                             K);
+    //             } else {
+    //                 rng_rfc6979(G_io_apdu_buffer + 100, hashBuf, NULL, 0, SECP256K1_N, 32, V, K);
+    //             }
+    //             uint32_t infos;
+    //             cx_ecdsa_sign(&privateKey,
+    //                           CX_NO_CANONICAL | CX_RND_PROVIDED | CX_LAST,
+    //                           CX_SHA256,
+    //                           hashBuf,
+    //                           32,
+    //                           G_io_apdu_buffer + 100,
+    //                           100,
+    //                           &infos);
+    //             TRACE_BUFFER(G_io_apdu_buffer + 100, 100);
 
-                if ((infos & CX_ECCINFO_PARITY_ODD) != 0) {
-                    G_io_apdu_buffer[100] |= 0x01;
-                }
-                G_io_apdu_buffer[0] = 27 + 4 + (G_io_apdu_buffer[100] & 0x01);
-                ecdsa_der_to_sig(G_io_apdu_buffer + 100, G_io_apdu_buffer + 1);
-                TRACE_BUFFER(G_io_apdu_buffer, PUBKEY_LENGTH);
+    //             if ((infos & CX_ECCINFO_PARITY_ODD) != 0) {
+    //                 G_io_apdu_buffer[100] |= 0x01;
+    //             }
+    //             G_io_apdu_buffer[0] = 27 + 4 + (G_io_apdu_buffer[100] & 0x01);
+    //             ecdsa_der_to_sig(G_io_apdu_buffer + 100, G_io_apdu_buffer + 1);
+    //             TRACE_BUFFER(G_io_apdu_buffer, PUBKEY_LENGTH);
 
-                if (check_canonical(G_io_apdu_buffer + 1)) {
-                    TRACE("Try %d succesfull!", tries);
-                    break;
-                } else {
-                    TRACE("Try %d unsuccesfull!", tries);
-                    tries++;
-                }
-            }
-        }
-        FINALLY {
-            memset(&privateKey, 0, sizeof(privateKey));
-        }
+    //             if (check_canonical(G_io_apdu_buffer + 1)) {
+    //                 TRACE("Try %d succesfull!", tries);
+    //                 break;
+    //             } else {
+    //                 TRACE("Try %d unsuccesfull!", tries);
+    //                 tries++;
+    //             }
+    //         }
+    //     }
+    //     FINALLY {
+    //         memset(&privateKey, 0, sizeof(privateKey));
+    //     }
+    // }
+    // END_TRY;
+
+    // TODO remove experiment
+    for (int i = 0; i < 10000; i++) {
+        // sha_256_init(&ctx->hashContext);
+        // sha_256_append(&ctx->hashContext, hashBuf, 32);
+        sha_256_finalize(&ctx->hashContext, hashBuf, 32);
+        sha_256_finalize(&ctx->hashContext, hashBuf, 32);
+        sha_256_finalize(&ctx->hashContext, hashBuf, 32);
     }
-    END_TRY;
+    // TODO end of experiment
 
     // We add hash to the response
     TRACE("ecdsa_der_to_sig_result:");

@@ -17,18 +17,18 @@
 import type Transport from "@ledgerhq/hw-transport"
 import { decodeMessage } from "./interactions/decodeMessage"
 
-import {DeviceStatusCodes, DeviceStatusError, InvalidDataReason} from './errors'
-import type {Interaction, SendParams} from './interactions/common/types'
-import {getPublicKey} from "./interactions/getPublicKey"
-import {getSerial} from "./interactions/getSerial"
-import {getCompatibility, getVersion} from "./interactions/getVersion"
-import {runTests} from "./interactions/runTests"
-import {signTransaction} from "./interactions/signTransaction"
-import {HexString, ParsedContext, ParsedTransaction, PUBLIC_KEY_LENGTH, ValidBIP32Path} from './types/internal'
-import type {BIP32Path, DeviceCompatibility, Serial, SignedTransactionData, Transaction, Version} from './types/public'
-import {stripRetcodeFromResponse} from "./utils"
-import {assert} from './utils/assert'
-import {isArray, parseBIP32Path, parseContext, parseHexString, parseMessage, parseTransaction, validate} from './utils/parse'
+import { DeviceStatusCodes, DeviceStatusError, InvalidDataReason } from './errors'
+import type { Interaction, SendParams } from './interactions/common/types'
+import { getPublicKey } from "./interactions/getPublicKey"
+import { getSerial } from "./interactions/getSerial"
+import { getCompatibility, getVersion } from "./interactions/getVersion"
+import { runTests } from "./interactions/runTests"
+import { signTransaction } from "./interactions/signTransaction"
+import { HexString, ParsedContext, ParsedTransaction, PUBLIC_KEY_LENGTH, ValidBIP32Path } from './types/internal'
+import type { BIP32Path, DeviceCompatibility, Serial, SignedTransactionData, Transaction, Version } from './types/public'
+import { stripRetcodeFromResponse } from "./utils"
+import { assert } from './utils/assert'
+import { isArray, parseBIP32Path, parseContext, parseHexString, parseMessage, parseTransaction, validate } from './utils/parse'
 
 export * from './errors'
 export * from './types/public'
@@ -96,9 +96,15 @@ async function interact<T>(
     let first = true
     while (!cursor.done) {
         const apdu = cursor.value
+
+        const start = Date.now();
         const res = first
             ? await wrapRetryStillInCall(send)(apdu)
             : await send(apdu)
+        const end = Date.now();
+        if (!first) {
+            console.log(`APDU to device took: ${(end - start) / 1000} seconds.`);
+        }
         first = false
         cursor = interaction.next(res)
     }
@@ -158,7 +164,7 @@ export class Fio {
      */
     async getVersion(): Promise<GetVersionResponse> {
         const version = await interact(this._getVersion(), this._send)
-        return {version, compatibility: getCompatibility(version)}
+        return { version, compatibility: getCompatibility(version) }
     }
 
     /** @ignore */
@@ -199,7 +205,7 @@ export class Fio {
      * @see [[GetPublicKeyRequest]]
      */
     async getPublicKey(
-        {path, show_or_not}: GetPublicKeyRequest
+        { path, show_or_not }: GetPublicKeyRequest
     ): Promise<GetPublicKeyResponse> {
         // validate the input
         validate(isArray(path), InvalidDataReason.GET_PUB_KEY_PATH_IS_NOT_ARRAY)
@@ -227,7 +233,7 @@ export class Fio {
      * @see [[SignTransactionResponse]]
  * ```
      */
-    async signTransaction({path, chainId, tx}: SignTransactionRequest): Promise<SignTransactionResponse> {
+    async signTransaction({ path, chainId, tx }: SignTransactionRequest): Promise<SignTransactionResponse> {
         const parsedChainId = parseHexString(chainId, InvalidDataReason.INVALID_CHAIN_ID)
         const parsedPath = parseBIP32Path(path, InvalidDataReason.INVALID_PATH)
         const parsedTx = parseTransaction(parsedChainId, tx)
@@ -253,7 +259,7 @@ export class Fio {
      * @see [[DecodeMessageResponse]]
  * ```
      */
-     async decodeMessage({path, publicKeyHex, message, context}: DecodeMessageRequest): Promise<DecodeMessageResponse> {
+    async decodeMessage({ path, publicKeyHex, message, context }: DecodeMessageRequest): Promise<DecodeMessageResponse> {
         const parsedPath = parseBIP32Path(path, InvalidDataReason.INVALID_PATH)
         const parsedPubkey = parseHexString(publicKeyHex, InvalidDataReason.INVALID_PUBLIC_KEY, PUBLIC_KEY_LENGTH, PUBLIC_KEY_LENGTH)
         const parsedMessage = parseMessage(message, InvalidDataReason.INVALID_MESSAGE)
@@ -308,7 +314,7 @@ export type GetPublicKeyRequest = {
     /** Path to public key which should be derived by the device */
     path: BIP32Path
     /** Show pubkey on the device or not */
-    show_or_not: boolean, 
+    show_or_not: boolean,
 }
 
 /**
@@ -349,7 +355,7 @@ export type SignTransactionResponse = SignedTransactionData
  * @category Main
  * @see [[DecodeMessageResponse]]
  */
- export type DecodeMessageRequest = {
+export type DecodeMessageRequest = {
     /** Path to public key used to decode the message */
     path: BIP32Path,
     /** Other public key in raw hex format*/
