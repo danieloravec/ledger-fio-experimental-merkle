@@ -40,44 +40,9 @@ static uint8_t const SECP256K1_N[] = {
     0xba, 0xae, 0xdc, 0xe6, 0xaf, 0x48, 0xa0, 0x3b, 0xbf, 0xd2, 0x5e, 0x8c, 0xd0, 0x36, 0x41, 0x41};
 
 // Uses ctx->dataToAppendToTx, ctx->dataToAppendToTxLen to extend hash
-// If ctx->dhIsActive then, we extend hash with encrypted data and prepare resulting encrypted
-// blocks to G_io_apdu_buffer, ctx->responseLength Variables (&ctx->wittnessPath, &ctx->otherPubkey,
-// &ctx->dhContext) are needed for encryption
-static void processShaAndPosibleDHAndPrepareResponse() {
-    if (ctx->dhIsActive) {
-        dh_aes_key_t aesKey;
-        BEGIN_TRY {
-            TRY {
-                // Compute AES key
-                dh_init_aes_key(&aesKey, &ctx->wittnessPath, &ctx->otherPubkey);
-
-                // Encode message chunk
-                ctx->responseLength = dh_encode_append(&ctx->dhContext,
-                                                       &aesKey,
-                                                       ctx->dataToAppendToTx,
-                                                       ctx->dataToAppendToTxLen,
-                                                       G_io_apdu_buffer,
-                                                       SIZEOF(G_io_apdu_buffer));
-                sha_256_append(&ctx->hashContext, G_io_apdu_buffer, ctx->responseLength);
-                VALIDATE(
-                    ctx->countedSectionDifference + ctx->responseLength >= ctx->dataToAppendToTxLen,
-                    ERR_INVALID_STATE);
-                ctx->countedSectionDifference =
-                    ctx->countedSectionDifference + ctx->responseLength - ctx->dataToAppendToTxLen;
-                TRACE("CS diff %d from:%d, %d",
-                      (int) ctx->countedSectionDifference,
-                      (int) ctx->responseLength,
-                      (int) ctx->dataToAppendToTxLen);
-            }
-            FINALLY {
-                explicit_bzero(&aesKey, SIZEOF(aesKey));
-            }
-        }
-        END_TRY;
-    } else {
-        sha_256_append(&ctx->hashContext, ctx->dataToAppendToTx, ctx->dataToAppendToTxLen);
-        ctx->responseLength = 0;
-    }
+static void processShaAndPrepareResponse() {
+    sha_256_append(&ctx->hashContext, ctx->dataToAppendToTx, ctx->dataToAppendToTxLen);
+    ctx->responseLength = 0;
 }
 
 // Takes &ctx->wittnessPath and modifies ctx->value to be null terminated scting to display the
@@ -190,7 +155,6 @@ __noinline_due_to_stack__ void signTx_handleInitAPDU(uint8_t p2,
     // Append data to hash and prepare response (none)
     {
         TRACE_STACK_USAGE();
-        VALIDATE(!ctx->dhIsActive, ERR_INVALID_STATE);
         VALIDATE(countedSectionProcess(&ctx->countedSections, ctx->dataToAppendToTxLen),
                  ERR_INVALID_DATA);
         sha_256_append(&ctx->hashContext, ctx->dataToAppendToTx, ctx->dataToAppendToTxLen);
@@ -257,11 +221,11 @@ __noinline_due_to_stack__ void signTx_handleAppendConstDataAPDU(
     }
     // Reading data finished, from now on we use G_io_apdu_buffer for output
 
-    // Append data to hash (with possible DH encryption) and prepare response
+    // Append data to hash and prepare response
     {
         VALIDATE(countedSectionProcess(&ctx->countedSections, ctx->dataToAppendToTxLen),
                  ERR_INVALID_DATA);
-        processShaAndPosibleDHAndPrepareResponse();
+        processShaAndPrepareResponse();
     }
 
     // Run ui step
@@ -431,10 +395,10 @@ __noinline_due_to_stack__ void signTx_handleAppendDataAPDU(uint8_t p2,
 
     // Reading data finished, from now on we use G_io_apdu_buffer for output
 
-    // Append data to hash (with possible DH encryption) and prepare response
+    // Append data to hash and prepare response
     {
         VALIDATE(countedSectionProcess(&ctx->countedSections, varSize), ERR_INVALID_DATA);
-        processShaAndPosibleDHAndPrepareResponse();
+        processShaAndPrepareResponse();
     }
 
     // Policy
@@ -515,14 +479,14 @@ __noinline_due_to_stack__ void signTx_handleStartCountedSectionAPDU(uint8_t p2,
 
     // Reading data finished, from now on we use G_io_apdu_buffer for output
 
-    // Append data to hash (with possible DH encryption) and prepare response, begin counted section
+    // Append data to hash and prepare response, begin counted section
     {
         // this data does not count towards new counted section but counts towards old ones
         VALIDATE(countedSectionProcess(&ctx->countedSections, ctx->dataToAppendToTxLen),
                  ERR_INVALID_DATA);
         VALIDATE(countedSectionBegin(&ctx->countedSections, numberOfExpectedBytes),
                  ERR_INVALID_DATA);
-        processShaAndPosibleDHAndPrepareResponse();
+        processShaAndPrepareResponse();
     }
 
     // Run ui step
@@ -560,11 +524,6 @@ __noinline_due_to_stack__ void signTx_handleEndCountedSectionAPDU(
 
     // Apend data to hash (no data) and response (none)
     {
-        // Counted section that started before DH encoding cannot end within DH encoding
-        if (ctx->dhIsActive) {
-            VALIDATE(ctx->dhCountedSectionEntryLevel < ctx->countedSections.currentLevel,
-                     ERR_INVALID_STATE);
-        }
         VALIDATE(countedSectionEnd(&ctx->countedSections), ERR_INVALID_DATA);
         ctx->responseLength = 0;
     }
@@ -632,240 +591,6 @@ __noinline_due_to_stack__ void signTx_handleStoreValueAPDU(
     // Run ui step
     ctx->ui_step = HANDLE_SIMPLE_STEP_RESPOND;
     signTx_ui_runStep_simple();
-}
-
-// ======================= START DH ENCODING ===========================
-enum {
-    HANDLE_DH_START_STEP_DISPLAY_MESSAGE = 800,
-    HANDLE_DH_START_STEP_RESPOND,
-    HANDLE_DH_START_STEP_INVALID,
-};
-
-static void signTx_handleDHStart_ui_runStep() {
-    TRACE("UI step %d", ctx->ui_step);
-    TRACE_STACK_USAGE();
-    ui_callback_fn_t* this_fn = signTx_handleDHStart_ui_runStep;
-
-    UI_STEP_BEGIN(ctx->ui_step, this_fn);
-
-    UI_STEP(HANDLE_DH_START_STEP_DISPLAY_MESSAGE) {
-        ui_displayPaginatedText("Encrypting", "content", this_fn);
-    }
-
-    UI_STEP(HANDLE_DH_START_STEP_RESPOND) {
-        io_send_buf(SUCCESS, G_io_apdu_buffer, ctx->responseLength);
-        ui_displayBusy();  // needs to happen after I/O
-    }
-
-    UI_STEP_END(HANDLE_DH_START_STEP_INVALID);
-}
-
-__noinline_due_to_stack__ void signTx_handleStartDHEncodingAPDU(
-    uint8_t p2,
-    MARK_UNUSED_NO_DEVEL uint8_t* constDataBuffer,
-    size_t constSize,
-    uint8_t* varDataBuffer,
-    size_t varSize) {
-    // Sanity checks and trace buffers
-    TRACE_STACK_USAGE();
-    {
-        VALIDATE(p2 == P2_UNUSED, ERR_INVALID_REQUEST_PARAMETERS);
-        TRACE_BUFFER(constDataBuffer, constSize);
-        TRACE_BUFFER(varDataBuffer, varSize);
-    }
-
-    // Data format
-    VALIDATE(constSize == 0, ERR_INVALID_DATA);
-    struct {
-        uint8_t pubkey[PUBKEY_LENGTH];
-    }* varData = (void*) varDataBuffer;
-    VALIDATE(varSize == PUBKEY_LENGTH, ERR_INVALID_DATA);
-
-    // Parse data ctx->otherPubkey
-    {
-        cx_err_t err = cx_ecfp_init_public_key_no_throw(CX_CURVE_SECP256K1,
-                                                        varData->pubkey,
-                                                        SIZEOF(varData->pubkey),
-                                                        &ctx->otherPubkey);
-        VALIDATE(err == CX_OK, ERR_INVALID_DATA);
-    }
-
-    // Preparing display variables ctx->key, ctx->value
-    {
-        TRACE_STACK_USAGE();
-        snprintf(ctx->key, MAX_DISPLAY_KEY_LENGTH, "Their Public Key");
-        uint32_t outlen = public_key_to_wif(ctx->otherPubkey.W,
-                                            SIZEOF(ctx->otherPubkey.W),
-                                            ctx->value,
-                                            SIZEOF(ctx->value));
-        ASSERT(outlen < SIZEOF(ctx->value));
-        ctx->value[outlen] = 0;
-    }
-
-    // Reading data finished, from now on we use G_io_apdu_buffer for output
-
-    // Init DH Encoding
-    // Append encrypted data to hash and response
-    {
-        TRACE_STACK_USAGE();
-        VALIDATE(!ctx->dhIsActive, ERR_INVALID_STATE);
-
-        dh_aes_key_t aesKey;
-        BEGIN_TRY {
-            TRY {
-                TRACE_STACK_USAGE();
-                // Compute AES key
-                dh_init_aes_key(&aesKey, &ctx->wittnessPath, &ctx->otherPubkey);
-
-                // Generate IV
-                uint8_t IV[DH_AES_IV_SIZE];
-                cx_rng_no_throw(IV, SIZEOF(IV));
-
-                // INIT dh context
-                STATIC_ASSERT(DH_AES_IV_SIZE == CX_AES_BLOCK_SIZE, "Unexpected IV length");
-                ctx->dhCountedSectionEntryLevel = ctx->countedSections.currentLevel;
-                ctx->responseLength = dh_encode_init(&ctx->dhContext,
-                                                     &aesKey,
-                                                     IV,
-                                                     SIZEOF(IV),
-                                                     G_io_apdu_buffer,
-                                                     SIZEOF(G_io_apdu_buffer));
-                ASSERT(ctx->responseLength == 20);  // first 5 blocks
-                ctx->countedSectionDifference = ctx->responseLength;
-                TRACE("CS diff %d", (int) ctx->responseLength);
-            }
-            FINALLY {
-                explicit_bzero(&aesKey, SIZEOF(aesKey));
-            }
-        }
-        END_TRY;
-
-        sha_256_append(&ctx->hashContext, G_io_apdu_buffer, ctx->responseLength);
-        ctx->dhIsActive = true;
-    }
-
-    // Run ui step
-    ctx->ui_step = HANDLE_DH_START_STEP_DISPLAY_MESSAGE;
-    signTx_handleDHStart_ui_runStep();
-}
-
-// ======================= END DH ENCODING ===========================
-
-enum {
-    HANDLE_DH_END_STEP_CONFIRM = 900,
-    HANDLE_DH_END_STEP_RESPOND,
-    HANDLE_DH_END_STEP_INVALID,
-};
-
-static void signTx_handleDHEnd_ui_runStep() {
-    TRACE("UI step %d", ctx->ui_step);
-    TRACE_STACK_USAGE();
-    ui_callback_fn_t* this_fn = signTx_handleDHEnd_ui_runStep;
-
-    UI_STEP_BEGIN(ctx->ui_step, this_fn);
-
-    UI_STEP(HANDLE_DH_END_STEP_CONFIRM) {
-        ui_displayPrompt("Encrypt content?", "", this_fn, respond_with_user_reject);
-    }
-
-    UI_STEP(HANDLE_DH_END_STEP_RESPOND) {
-        io_send_buf(SUCCESS, G_io_apdu_buffer, ctx->responseLength);
-        ui_displayBusy();  // needs to happen after I/O
-    }
-
-    UI_STEP_END(HANDLE_DH_END_STEP_INVALID);
-}
-
-__noinline_due_to_stack__ void signTx_handleEndDHEncodingAPDU(
-    uint8_t p2,
-    MARK_UNUSED_NO_DEVEL uint8_t* constDataBuffer,
-    size_t constSize,
-    MARK_UNUSED_NO_DEVEL uint8_t* varDataBuffer,
-    size_t varSize) {
-    // Sanity checks and trace buffers
-    TRACE_STACK_USAGE();
-    {
-        VALIDATE(p2 == P2_UNUSED, ERR_INVALID_REQUEST_PARAMETERS);
-        TRACE_BUFFER(constDataBuffer, constSize);
-        TRACE_BUFFER(varDataBuffer, varSize);
-    }
-
-    // Data format
-    {
-        VALIDATE(constSize == 0, ERR_INVALID_DATA);
-        VALIDATE(varSize == 0, ERR_INVALID_DATA);
-    }
-
-    // Preparing display variables ctx->key, ctx->value
-    {
-        snprintf(ctx->key, MAX_DISPLAY_KEY_LENGTH, "Our Public Key");
-        prepareOurPubkeyForDisplay();
-    }
-
-    // Reading data finished, from now on we use G_io_apdu_buffer for output
-    {
-        // Apend data to hash (final blocks of DH encryption) and prepare response
-        {
-            // To be sure that we are encoding correct DH data
-            VALIDATE(integrityCheckEvaluate(&ctx->integrity), ERR_INTEGRITY_CHECK_FAILED);
-
-            VALIDATE(ctx->dhIsActive, ERR_INVALID_STATE);
-            // Counted section that started within DH encoding cannot end after DH encoding
-            VALIDATE(ctx->dhCountedSectionEntryLevel == ctx->countedSections.currentLevel,
-                     ERR_INVALID_STATE);
-
-            dh_aes_key_t aesKey;
-            BEGIN_TRY {
-                TRY {
-                    // Compute AES key
-                    dh_init_aes_key(&aesKey, &ctx->wittnessPath, &ctx->otherPubkey);
-
-                    ctx->responseLength = dh_encode_finalize(&ctx->dhContext,
-                                                             &aesKey,
-                                                             G_io_apdu_buffer,
-                                                             SIZEOF(G_io_apdu_buffer));
-                }
-                FINALLY {
-                    explicit_bzero(&aesKey, SIZEOF(aesKey));
-                }
-            }
-            END_TRY;
-
-            ctx->countedSectionDifference += ctx->responseLength;
-            TRACE("CS diff %d from:%d",
-                  (int) ctx->countedSectionDifference,
-                  (int) ctx->responseLength);
-            VALIDATE(countedSectionProcess(&ctx->countedSections, ctx->countedSectionDifference),
-                     ERR_INVALID_STATE);
-
-            sha_256_append(&ctx->hashContext, G_io_apdu_buffer, ctx->responseLength);
-            ctx->dhIsActive = false;
-        }
-
-        // Security policy
-        {
-            security_policy_t policy = POLICY_DENY;
-            policy = policyForSignTxDHEnd();
-            TRACE("Policy: %d", (int) policy);
-            ENSURE_NOT_DENIED(policy);
-            {
-                // select UI steps
-                switch (policy) {
-#define CASE(POLICY, UI_STEP)   \
-    case POLICY: {              \
-        ctx->ui_step = UI_STEP; \
-        break;                  \
-    }
-                    CASE(POLICY_PROMPT_BEFORE_RESPONSE, HANDLE_DH_END_STEP_CONFIRM);
-                    default:
-                        THROW(ERR_NOT_IMPLEMENTED);
-#undef CASE
-                }
-            }
-        }
-    }
-
-    signTx_handleDHEnd_ui_runStep();
 }
 
 // ============================== FINISH ==============================
@@ -941,7 +666,6 @@ __noinline_due_to_stack__ void signTx_handleFinishAPDU(
     // This is the last call - we need to check integrity of the command sequence + just for good
     // measures we finalize counted section
     {
-        VALIDATE(!ctx->dhIsActive, ERR_INVALID_STATE);
         VALIDATE(integrityCheckEvaluate(&ctx->integrity), ERR_INTEGRITY_CHECK_FAILED);
         VALIDATE(countedSectionFinalize(&ctx->countedSections), ERR_INVALID_DATA);
     }
@@ -1068,8 +792,6 @@ static subhandler_fn_t* lookup_subhandler(uint8_t p1) {
         CASE(0x05, signTx_handleStartCountedSectionAPDU);
         CASE(0x06, signTx_handleEndCountedSectionAPDU);
         CASE(0x07, signTx_handleStoreValueAPDU);
-        CASE(0x08, signTx_handleStartDHEncodingAPDU);
-        CASE(0x09, signTx_handleEndDHEncodingAPDU);
         CASE(0x10, signTx_handleFinishAPDU);
         DEFAULT(NULL)
 #undef CASE
@@ -1096,8 +818,6 @@ void signTransaction_handleAPDU(uint8_t p1,
         TRACE("Storage init");
         explicit_bzero(&ctx->storage, SIZEOF(ctx->storage));
         ctx->storage.initialized_magic = TX_STORAGE_INITIALIZED_MAGIC;
-        TRACE("DH inactive");
-        ctx->dhIsActive = false;
         ctx->initWasCalledMagic = TX_INIT_WAS_CALLED_INITIALIZED_MAGIC;
     }
     VALIDATE(TX_INIT_WAS_CALLED_INITIALIZED_MAGIC, ERR_INVALID_DATA);
