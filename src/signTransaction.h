@@ -42,15 +42,6 @@ typedef struct {
     uint8_t dataToAppendToTxLen;
     uint8_t dataToAppendToTx[MAX_TX_APPEND_IN_SINGLE_APDU];
 
-    // DH encryption variables
-    uint8_t dhIsActive;
-    uint8_t dhCountedSectionEntryLevel;
-    public_key_t otherPubkey;
-    dh_context_t dhContext;
-    // DH encoding decreases data length, we need to store the difference and add the value to
-    // counted section after we finish DH encoding
-    uint16_t countedSectionDifference;
-
     int ui_step;
     uint8_t responseLength;  // Response is in G_io_apdu_buffer
 
