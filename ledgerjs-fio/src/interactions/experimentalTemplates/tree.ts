@@ -25,7 +25,6 @@ export type MerkleNodeWithoutHash = {
 
 export type MerkleNode = {
     side: MerkleNodeSide,
-    commandBase: TxIndependentCommandBase, // Only "command" nodes will have this filled TODO do we need this here?
     leftChild?: MerkleNode,
     rightChild?: MerkleNode,
     dfsId: DfsNodeId,

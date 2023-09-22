@@ -2,9 +2,10 @@ import { COMMAND, TxIndependentCommandBase } from "./commands";
 import { template_base_trnsfiopubky } from "./txIndependent/template_base_trnsfiopubky"
 import { HexString } from "types/internal";
 import { findNextPowerOfTwo } from "./utils/utils";
-import { MerkleNodeWithoutHash, DfsNodeId, BfsNodeId } from "./tree";
+import { MerkleNodeWithoutHash, DfsNodeId, BfsNodeId, MerkleNode } from "./tree";
 import assert from "assert";
 import { Queue } from 'queue-typescript';
+import { createHash } from "crypto";
 
 const makeInitCommands = (): Array<TxIndependentCommandBase> => {
     return [
@@ -179,17 +180,72 @@ const addBfsIdsToTree = (root: MerkleNodeWithoutHash): MerkleNodeWithoutHash => 
     return root;
 }
 
-const buildMerkleTreeFromCommands = (commands: Array<TxIndependentCommandBase>) => {
+const serializeCommandBase = (commandBase: TxIndependentCommandBase): Buffer => {
+    // TODO change the JSON.stringify part to something more reasonable
+    return Buffer.from([commandBase.name.toString(), JSON.stringify(commandBase.params)].join('#'), 'utf-8');
+}
+
+const serializeDfsId = (dfsId?: DfsNodeId): Buffer => {
+    if (!dfsId) {
+        return Buffer.from("0", 'utf-8');
+    }
+    return Buffer.from(["0", dfsId.inTime.toString(), dfsId.outTime.toString()].join('#'), 'utf-8');
+}
+
+const serializeBfsId = (bfsId?: BfsNodeId): Buffer => {
+    if (!bfsId) {
+        return Buffer.from("1", 'utf-8');
+    }
+    return Buffer.from(["1", bfsId.commandLevel.toString(), bfsId.levelSeqNumber.toString()].join('#'), 'utf-8');
+}
+
+const fillMerkleHashesToTree = (root: MerkleNodeWithoutHash): MerkleNode => {
+    const fillMerkleHashesToNode = (node: MerkleNodeWithoutHash): MerkleNode => {
+        let leftChildWithHash: MerkleNode | undefined = undefined;
+        let rightChildWithHash: MerkleNode | undefined = undefined;
+        if (node.leftChild) {
+            leftChildWithHash = fillMerkleHashesToNode(node.leftChild);
+        }
+        if (node.rightChild) {
+            rightChildWithHash = fillMerkleHashesToNode(node.rightChild);
+        }
+        let serializedNodeToHash = Buffer.from("");
+        if (node.commandBase) {
+            serializedNodeToHash = Buffer.from([
+                node.side,
+                serializeCommandBase(node.commandBase),
+                serializeBfsId(node.bfsId),
+                serializeDfsId(node.dfsId),
+                leftChildWithHash?.hash ?? "",
+                rightChildWithHash?.hash ?? "",
+            ].join("#"), 'utf-8');
+        } else {
+            serializedNodeToHash = Buffer.from((leftChildWithHash?.hash ?? "") + (rightChildWithHash?.hash ?? ""), 'utf-8');
+        }
+        const hash = createHash("sha256").update(serializedNodeToHash).digest("hex") as HexString;
+        return {
+            side: node.side,
+            leftChild: leftChildWithHash,
+            rightChild: rightChildWithHash,
+            dfsId: node.dfsId ?? { inTime: -1, outTime: -1 },
+            bfsId: node.bfsId ?? { commandLevel: -1, levelSeqNumber: -1 },
+            hash
+        }
+    }
+    return fillMerkleHashesToNode(root);
+}
+
+const buildMerkleTreeFromCommands = (commands: Array<TxIndependentCommandBase>): MerkleNode => {
     // First we need to add padding to "command" levels, so that the number of "leafs" in ich subtree is a power of 2
     const paddedCommands = addPaddingToCommands(commands);
     const treeBase = buildPlainTreeFromPaddedCommands(paddedCommands);
     const treeWithDfsIds = addDfsIdsToTree(treeBase);
     const treeWithDfsAndBfsIds = addBfsIdsToTree(treeWithDfsIds);
-    const merkleTree = fillMerkleHashesToTree(treeWithDfsAndBfsIds); // TODO implement this function
-    return merkleTree;
+    const merkleTreeRoot = fillMerkleHashesToTree(treeWithDfsAndBfsIds);
+    return merkleTreeRoot;
 }
 
-export const buildMerkleTree = () => {
+export const buildMerkleTree = (): MerkleNode => {
     const commands = aggregateAllTemplates();
     return buildMerkleTreeFromCommands(commands);
 }
