@@ -2,7 +2,7 @@ import { COMMAND, TxIndependentCommandBase } from "./commands";
 import { template_base_trnsfiopubky } from "./txIndependent/template_base_trnsfiopubky"
 import { HexString } from "types/internal";
 import { findNextPowerOfTwo } from "./utils/utils";
-import { MerkleNodeWithoutHash } from "./tree";
+import { MerkleNodeWithoutHash, DfsNodeId } from "./tree";
 import assert from "assert";
 
 const makeInitCommands = (): Array<TxIndependentCommandBase> => {
@@ -128,11 +128,31 @@ const buildPlainTreeFromPaddedCommands = (commands: Array<TxIndependentCommandBa
     return nodesLevel[0];
 }
 
+const addDfsIdsToTree = (root: MerkleNodeWithoutHash): MerkleNodeWithoutHash => {
+    let inTime = 0;
+    const addDfsIdsToNode = (node: MerkleNodeWithoutHash): DfsNodeId => {
+        const dfsId: DfsNodeId = {
+            inTime,
+            outTime: -1,
+        };
+        inTime++;
+        [node.leftChild, node.rightChild].forEach(child => {
+            if (child) {
+                dfsId.outTime = addDfsIdsToNode(child).outTime;
+            }
+        });
+        node.dfsId = dfsId;
+        return dfsId;
+    }
+    addDfsIdsToNode(root);
+    return root;
+}
+
 const buildMerkleTreeFromCommands = (commands: Array<TxIndependentCommandBase>) => {
     // First we need to add padding to "command" levels, so that the number of "leafs" in ich subtree is a power of 2
     const paddedCommands = addPaddingToCommands(commands);
-    const treeBase = buildPlainTreeFromPaddedCommands(paddedCommands); // TODO implement this function
-    const treeWithDfsIds = addDfsIdsToTree(treeBase); // TODO implement this function
+    const treeBase = buildPlainTreeFromPaddedCommands(paddedCommands);
+    const treeWithDfsIds = addDfsIdsToTree(treeBase);
     const treeWithDfsAndBfsIds = addBfsIdsToTree(treeWithDfsIds) // TODO implement this function
     const merkleTree = fillMerkleHashesToTree(treeWithDfsAndBfsIds); // TODO implement this function
     return merkleTree;
