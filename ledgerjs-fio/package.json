@@ -20,7 +20,8 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@ledgerhq/hw-transport": "^5.12.0",
-    "@types/ledgerhq__hw-transport": "^4.21.3"
+    "@types/ledgerhq__hw-transport": "^4.21.3",
+    "queue-typescript": "^1.0.1"
   },
   "devDependencies": {
     "@fioprotocol/fiojs": "^1.0.1",

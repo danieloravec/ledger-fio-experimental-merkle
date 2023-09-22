@@ -2,8 +2,9 @@ import { COMMAND, TxIndependentCommandBase } from "./commands";
 import { template_base_trnsfiopubky } from "./txIndependent/template_base_trnsfiopubky"
 import { HexString } from "types/internal";
 import { findNextPowerOfTwo } from "./utils/utils";
-import { MerkleNodeWithoutHash, DfsNodeId } from "./tree";
+import { MerkleNodeWithoutHash, DfsNodeId, BfsNodeId } from "./tree";
 import assert from "assert";
+import { Queue } from 'queue-typescript';
 
 const makeInitCommands = (): Array<TxIndependentCommandBase> => {
     return [
@@ -148,12 +149,42 @@ const addDfsIdsToTree = (root: MerkleNodeWithoutHash): MerkleNodeWithoutHash => 
     return root;
 }
 
+const addBfsIdsToTree = (root: MerkleNodeWithoutHash): MerkleNodeWithoutHash => {
+    // Also store prevCommandLevel besides the node, because we want to skip non-command nodes in numbering
+    // This is because we need to be able to say that the next allowed instruction is from (currentLevel - 1).
+    // If we also included non-command nodes in this numbering, then the previous command-level would be (currentLevel - x),
+    // where x could be any natural number.
+    const queue = new Queue<[MerkleNodeWithoutHash, number]>();
+    queue.enqueue([root, -1]);
+    let levelSeqNumber = 0;
+    while (queue.length > 0) {
+        const [node, prevCommandLevel] = queue.dequeue();
+        let prevCommandLevelForChild = prevCommandLevel;
+        if (node.commandBase) {
+            node.bfsId = {
+                commandLevel: prevCommandLevel + 1,
+                levelSeqNumber,
+            };
+            prevCommandLevelForChild = node.bfsId.commandLevel;
+            levelSeqNumber++;
+        } else {
+            levelSeqNumber = 0;
+        }
+        [node.leftChild, node.rightChild].forEach(child => {
+            if (child) {
+                queue.enqueue([child, prevCommandLevelForChild]);
+            }
+        });
+    }
+    return root;
+}
+
 const buildMerkleTreeFromCommands = (commands: Array<TxIndependentCommandBase>) => {
     // First we need to add padding to "command" levels, so that the number of "leafs" in ich subtree is a power of 2
     const paddedCommands = addPaddingToCommands(commands);
     const treeBase = buildPlainTreeFromPaddedCommands(paddedCommands);
     const treeWithDfsIds = addDfsIdsToTree(treeBase);
-    const treeWithDfsAndBfsIds = addBfsIdsToTree(treeWithDfsIds) // TODO implement this function
+    const treeWithDfsAndBfsIds = addBfsIdsToTree(treeWithDfsIds);
     const merkleTree = fillMerkleHashesToTree(treeWithDfsAndBfsIds); // TODO implement this function
     return merkleTree;
 }
