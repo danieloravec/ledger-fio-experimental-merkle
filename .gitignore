@@ -17,3 +17,6 @@ pkg
 *.new.png
 yarn.lock
 null.d
+venv
+build
+
