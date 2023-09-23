@@ -1,12 +1,10 @@
 import type { Uint8_t } from "../../../types/internal"
-import { COMMAND, TxIndependentCommandBase } from "../commands"
+import { COMMAND, TxIndependentCommandBase, VALUE_STORAGE_COMPARE, VALUE_FORMAT, VALUE_POLICY, VALUE_VALIDATION } from "../commands"
 
 
 export function template_base_trnsfiopubky(): Array<TxIndependentCommandBase> {
 
-    // TODO storage checks are not included here. Is that an issue?
-    // TODO don't use strings for command names, but use constants from utils/command_names.ts (and first define them there)
-    // TODO incorporate encodings to send data
+    // TODO incorporate encodings to APPEND_DATA
     return [
         {
             name: COMMAND.APPEND_CONST_DATA,
@@ -25,12 +23,31 @@ export function template_base_trnsfiopubky(): Array<TxIndependentCommandBase> {
                 register: 1 as Uint8_t,
             }
         },
+        // {
+        //     name: COMMAND.APPEND_DATA,
+        //     params: {
+        //         minBufLen: 8,
+        //         maxBufLen: 8,
+        //         show: false,
+        //         format: VALUE_FORMAT.VALUE_FORMAT_BUFFER_SHOW_AS_HEX,
+        //         validation: VALUE_VALIDATION.VALUE_VALIDATION_INBUFFER_LENGTH,
+        //         bufLenMin: 8,
+        //         bufLenMax: 8,
+        //         policy: VALUE_POLICY.VALUE_DO_NOT_SHOW_ON_DEVICE,
+        //         storageCheck: VALUE_STORAGE_COMPARE.COMPARE_REGISTER1
+        //     }
+        // },
+        BASE_COMMAND_APPEND_DATA_BUFFER_DO_NOT_SHOW(Buffer.from(authorization.actor, "hex"), 8, 8),
         {
             name: COMMAND.APPEND_DATA,
             params: {
-                minBufLen: 8,
-                maxBufLen: 8,
-                show: false
+                show: false,
+                format: VALUE_FORMAT.VALUE_FORMAT_BUFFER_SHOW_AS_HEX,
+                validation: VALUE_VALIDATION.VALUE_VALIDATION_INBUFFER_LENGTH,
+                bufLenMin: 8,
+                bufLenMax: 8,
+                policy: VALUE_POLICY.VALUE_DO_NOT_SHOW_ON_DEVICE,
+                storageCheck: VALUE_STORAGE_COMPARE.COMPARE_REGISTER1
             }
         },
         {

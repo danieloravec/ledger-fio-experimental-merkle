@@ -1,11 +1,10 @@
 import { assert } from "../../utils/assert";
-import { InvalidDataReason } from "../../errors"
-import { HexString, Uint8_t, ParsedTransaction, ValidBIP32Path, VarlenAsciiString, Uint64_str } from "types/internal"
-import { buf_to_hex, path_to_buf, uint8_to_buf, varuint32_to_buf } from "../../utils/serialize";
+import { InvalidDataReason } from "../../errors";
+import { HexString, Uint8_t, ParsedTransaction, ValidBIP32Path, VarlenAsciiString } from "types/internal";
+import { buf_to_hex, path_to_buf, varuint32_to_buf } from "../../utils/serialize";
 import type { SignedTransactionData } from "../../types/public";
 import { chunkBy } from "../../utils/ioHelpers"
 import { validate } from "../../utils/parse";
-import { createHash } from "crypto";
 
 export const enum COMMAND {
     NONE = 0x00,
@@ -67,10 +66,6 @@ export const dhDataAction: DataAction = (b, s) => {
     }
 }
 
-export type TxIndependentCommandBase = {
-    name: COMMAND,
-    params: Record<string, any>
-}
 
 export type Command = {
     command: COMMAND,
@@ -225,7 +220,7 @@ export function COMMAND_APPEND_DATA_STRING_SHOW(key: string, varData: Buffer, bu
 }
 
 //calculates the length of varint
-function lenlen(n: number): number {
+export function lenlen(n: number): number {
     return 1 + (n >= 128 ? 1 : 0) + (n >= 16384 ? 1 : 0) + (n >= 2097152 ? 1 : 0) + (n >= 268435456 ? 1 : 0)
 }
 
@@ -455,18 +450,23 @@ export function COMMAND_APPEND_DATA_CHAIN_CODE_TOKEN_CODE_PUBLIC_ADDR_SHOW(key: 
     }
 }
 
-export function COMMAND_START_FOR_LOOP(allowedIterations: Array<Command>, minIterations: number, maxIterations: number): Command {
-    const ITERATIONS_HASH_SIZE = 32;
+export function COMMAND_START_FOR_LOOP(minIterations: number, maxIterations: number): Command {
     const MIN_ITERATIONS_SIZE = 4;
     const MAX_ITERATIONS_SIZE = 4;
-    const buf = Buffer.allocUnsafe(ITERATIONS_HASH_SIZE + MIN_ITERATIONS_SIZE + MAX_ITERATIONS_SIZE);
-    const allowedIterationsHash = calculateAllowedIterationsHash(allowedIterations); // TODO implement this function
-    buf.write(allowedIterationsHash, 'hex'); // TODO is this correct?
-    buf.writeUInt32LE(minIterations, ITERATIONS_HASH_SIZE);
-    buf.writeUInt32LE(maxIterations, ITERATIONS_HASH_SIZE + MIN_ITERATIONS_SIZE);
+    const buf = Buffer.allocUnsafe(MIN_ITERATIONS_SIZE + MAX_ITERATIONS_SIZE);
+    // TODO don't we really need allowedIterationsHash? I think we don't as the Merkle tree solves this.
+    buf.writeUInt32LE(minIterations, 0);
+    buf.writeUInt32LE(maxIterations, MIN_ITERATIONS_SIZE);
     return {
         ...defaultCommand,
         command: COMMAND.START_FOR,
         constData: buf.toString("hex") as HexString
+    }
+}
+
+export function COMMAND_END_FOR_LOOP(): Command {
+    return {
+        ...defaultCommand,
+        command: COMMAND.END_FOR,
     }
 }

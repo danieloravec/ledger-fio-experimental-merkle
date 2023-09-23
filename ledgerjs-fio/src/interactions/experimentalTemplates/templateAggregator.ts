@@ -7,6 +7,8 @@ import assert from "assert";
 import { Queue } from 'queue-typescript';
 import { createHash } from "crypto";
 
+const DFS_BFS_ID_NO_VALUE = 0xffffffff;
+
 const makeInitCommands = (): Array<TxIndependentCommandBase> => {
     return [
         {
@@ -135,7 +137,7 @@ const addDfsIdsToTree = (root: MerkleNodeWithoutHash): MerkleNodeWithoutHash => 
     const addDfsIdsToNode = (node: MerkleNodeWithoutHash): DfsNodeId => {
         const dfsId: DfsNodeId = {
             inTime,
-            outTime: -1,
+            outTime: DFS_BFS_ID_NO_VALUE,
         };
         inTime++;
         [node.leftChild, node.rightChild].forEach(child => {
@@ -181,22 +183,105 @@ const addBfsIdsToTree = (root: MerkleNodeWithoutHash): MerkleNodeWithoutHash => 
 }
 
 const serializeCommandBase = (commandBase: TxIndependentCommandBase): Buffer => {
-    // TODO change the JSON.stringify part to something more reasonable
-    return Buffer.from([commandBase.name.toString(), JSON.stringify(commandBase.params)].join('#'), 'utf-8');
+    const commandTypeBuffer = Buffer.from([commandBase.name]);
+
+    let constDataBuffer = Buffer.from("");
+    if (commandBase.name === COMMAND.START_FOR) {
+        // Min number of iterations as 4 bytes
+        // Max number of iterations as 4 bytes
+        // No need for hash of allowed iterations, this is solved by the Merkle tree itself
+        const minNumOfIterationsBuffer = Buffer.alloc(4);
+        minNumOfIterationsBuffer.writeUInt32LE(commandBase.params.minNumOfIterations, 0);
+        const maxNumOfIterationsBuffer = Buffer.alloc(4);
+        maxNumOfIterationsBuffer.writeUInt32LE(commandBase.params.maxNumOfIterations, 0);
+        constDataBuffer = Buffer.concat([minNumOfIterationsBuffer, maxNumOfIterationsBuffer]);
+    } else if (commandBase.name === COMMAND.SHOW_MESSAGE) {
+        constDataBuffer = Buffer.from(commandBase.params.key, 'utf-8');
+    } else if (commandBase.name === COMMAND.START_COUNTED_SECTION) {
+        const expectedLengthBuffer = Buffer.alloc(4);
+        expectedLengthBuffer.writeUInt32LE(commandBase.params.expectedLength, 0);
+        constDataBuffer = expectedLengthBuffer;
+    }
+    // TODO add other command types here, fix ones already added (which constant params they have in command base, number of bytes per field etc.)
+    return Buffer.concat([commandTypeBuffer, constDataBuffer]);
 }
 
+// This takes up 9 bytes:
+//   -> 1 byte is for the "00" prefix (differentiating this from BFS ID)
+//   -> 4 bytes for inTime (or FF FF FF FF if not present)
+//   -> 4 bytes for outTime (or FF FF FF FF if not present)
 const serializeDfsId = (dfsId?: DfsNodeId): Buffer => {
     if (!dfsId) {
-        return Buffer.from("0", 'utf-8');
+        dfsId = { inTime: DFS_BFS_ID_NO_VALUE, outTime: DFS_BFS_ID_NO_VALUE };
     }
-    return Buffer.from(["0", dfsId.inTime.toString(), dfsId.outTime.toString()].join('#'), 'utf-8');
+
+    const inTimeBuffer = Buffer.alloc(4);
+    inTimeBuffer.writeUInt32LE(dfsId.inTime, 0);
+
+    const outTimeBuffer = Buffer.alloc(4);
+    outTimeBuffer.writeUInt32LE(dfsId.outTime, 0);
+
+    return Buffer.concat([
+        Buffer.from("00", 'hex'),
+        inTimeBuffer,
+        outTimeBuffer
+    ]);
 }
 
+// This takes up 9 bytes:
+//   -> 1 byte is for the "01" prefix (differentiating this from DFS ID)
+//   -> 4 bytes for commandLevel (or FF FF FF FF if not present)
+//   -> 4 bytes for levelSeqNumber (or FF FF FF FF if not present)
 const serializeBfsId = (bfsId?: BfsNodeId): Buffer => {
     if (!bfsId) {
-        return Buffer.from("1", 'utf-8');
+        bfsId = { commandLevel: DFS_BFS_ID_NO_VALUE, levelSeqNumber: DFS_BFS_ID_NO_VALUE };
     }
-    return Buffer.from(["1", bfsId.commandLevel.toString(), bfsId.levelSeqNumber.toString()].join('#'), 'utf-8');
+
+    const commandLevelBuffer = Buffer.alloc(4);
+    commandLevelBuffer.writeUInt32LE(bfsId.commandLevel, 0);
+
+    const levelSeqNumberBuffer = Buffer.alloc(4);
+    levelSeqNumberBuffer.writeUInt32LE(bfsId.levelSeqNumber, 0);
+
+    return Buffer.concat([
+        Buffer.from("01", 'hex'),
+        commandLevelBuffer,
+        levelSeqNumberBuffer
+    ]);
+}
+
+// Takes up 1 + 9 + 9 + 32 + 32 + ? bytes
+//  -> 1 byte for side (left / right)
+//  -> 9 bytes for DFS ID
+//  -> 9 bytes for BFS ID
+//  -> 32 bytes for left child hash
+//  -> 32 bytes for right child hash
+//  -> ? bytes for commandBase (if present)
+const serializeMerkleNodeWithoutHash = (node: MerkleNodeWithoutHash, leftChildHash?: string, rightChildHash?: string): Buffer => {
+    const zeroHash = "0000000000000000000000000000000000000000000000000000000000000000";
+    if (!leftChildHash) {
+        leftChildHash = zeroHash;
+    }
+    if (!rightChildHash) {
+        rightChildHash = zeroHash;
+    }
+    const serializedSide = Buffer.from(node.side === "left" ? "00" : "01", "hex");
+    const serializedLeftChildHash = Buffer.from(leftChildHash, "hex");
+    const serializedRightChildHash = Buffer.from(rightChildHash, "hex");
+    const serializedBufferWithoutCommandBase = Buffer.concat([
+        serializedSide,
+        serializeDfsId(node.dfsId),
+        serializeBfsId(node.bfsId),
+        serializedLeftChildHash,
+        serializedRightChildHash,
+    ]);
+    if (node.commandBase) {
+        return Buffer.concat([
+            serializedBufferWithoutCommandBase,
+            serializeCommandBase(node.commandBase),
+        ]);
+    }
+    return serializedBufferWithoutCommandBase;
 }
 
 const fillMerkleHashesToTree = (root: MerkleNodeWithoutHash): MerkleNode => {
@@ -209,26 +294,14 @@ const fillMerkleHashesToTree = (root: MerkleNodeWithoutHash): MerkleNode => {
         if (node.rightChild) {
             rightChildWithHash = fillMerkleHashesToNode(node.rightChild);
         }
-        let serializedNodeToHash = Buffer.from("");
-        if (node.commandBase) {
-            serializedNodeToHash = Buffer.from([
-                node.side,
-                serializeCommandBase(node.commandBase),
-                serializeBfsId(node.bfsId),
-                serializeDfsId(node.dfsId),
-                leftChildWithHash?.hash ?? "",
-                rightChildWithHash?.hash ?? "",
-            ].join("#"), 'utf-8');
-        } else {
-            serializedNodeToHash = Buffer.from((leftChildWithHash?.hash ?? "") + (rightChildWithHash?.hash ?? ""), 'utf-8');
-        }
+        let serializedNodeToHash = serializeMerkleNodeWithoutHash(node, leftChildWithHash?.hash, rightChildWithHash?.hash);
         const hash = createHash("sha256").update(serializedNodeToHash).digest("hex") as HexString;
         return {
             side: node.side,
             leftChild: leftChildWithHash,
             rightChild: rightChildWithHash,
-            dfsId: node.dfsId ?? { inTime: -1, outTime: -1 },
-            bfsId: node.bfsId ?? { commandLevel: -1, levelSeqNumber: -1 },
+            dfsId: node.dfsId ?? { inTime: DFS_BFS_ID_NO_VALUE, outTime: DFS_BFS_ID_NO_VALUE },
+            bfsId: node.bfsId ?? { commandLevel: DFS_BFS_ID_NO_VALUE, levelSeqNumber: DFS_BFS_ID_NO_VALUE },
             hash
         }
     }
