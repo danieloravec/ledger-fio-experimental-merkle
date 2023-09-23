@@ -29,8 +29,6 @@ export function template_trnsfiopubky(chainId: HexString, tx: ParsedTransaction,
     const actionData: ParsedTransferFIOTokensData = tx.actions[0].data as ParsedTransferFIOTokensData;
     const authorization: ParsedActionAuthorisation = tx.actions[0].authorization[0];
 
-    console.log(`\n\ntx.actions[0].account: ${tx.actions[0].account}`);
-    console.log(`\n\ntx.actions[0].name: ${tx.actions[0].name}\n\n`);
     return [
         COMMAND_APPEND_CONST_DATA(tx.actions[0].account + tx.actions[0].name + "01" as HexString),
         COMMAND_SHOW_MESSAGE("Action", "Transfer FIO tokens"),

@@ -5,6 +5,7 @@ import { buf_to_hex, path_to_buf, varuint32_to_buf } from "../../utils/serialize
 import type { SignedTransactionData } from "../../types/public";
 import { chunkBy } from "../../utils/ioHelpers"
 import { validate } from "../../utils/parse";
+import { TxIndependentCommandBase } from "./baseCommands";
 
 export const enum COMMAND {
     NONE = 0x00,
@@ -139,224 +140,115 @@ export function templateAlternative(templates: Array<TransactionTemplate>): Tran
     }
 }
 
+export function makeCommandFromBase(commandBase: TxIndependentCommandBase, varData?: Buffer, txLen?: number): Command {
+    return {
+        ...defaultCommand,
+        command: commandBase.name,
+        constData: commandBase.serializedConstData,
+        varData: varData ?? defaultCommand.varData,
+        txLen: txLen ?? defaultCommand.txLen,
+    }
+}
+
 //---------------------INSTRUCTION SPECIFIC COMMANDS---------------------------------
 
-export function COMMAND_INIT(chainId: HexString, parsedPath: ValidBIP32Path): Command {
-    const varData = Buffer.concat([Buffer.from(chainId, "hex"), path_to_buf(parsedPath)])
-    return {
-        ...defaultCommand,
-        command: COMMAND.INIT,
-        varData: varData,
-        txLen: varData.length
-    }
+export function COMMAND_NONE(commandBase: TxIndependentCommandBase): Command {
+    return makeCommandFromBase(commandBase);
 }
 
-export function COMMAND_APPEND_CONST_DATA(constData: HexString): Command {
-    return {
-        ...defaultCommand,
-        command: COMMAND.APPEND_CONST_DATA,
-        constData: constData,
-        txLen: Buffer.from(constData, "hex").length,
-    }
+export function COMMAND_INIT(commandBase: TxIndependentCommandBase, chainId: HexString, parsedPath: ValidBIP32Path): Command {
+    const varData = Buffer.concat([Buffer.from(chainId, "hex"), path_to_buf(parsedPath)]);
+    return makeCommandFromBase(commandBase, varData, varData.length);
 }
 
-export function COMMAND_SHOW_MESSAGE(key: string, value: string): Command {
-    return {
-        ...defaultCommand,
-        command: COMMAND.SHOW_MESSAGE,
-        constData: constDataShowMessage(
-            key,
-            value
-        ),
-    }
+export function COMMAND_APPEND_CONST_DATA(commandBase: TxIndependentCommandBase): Command {
+    return makeCommandFromBase(commandBase, defaultCommand.varData, Buffer.from(commandBase.serializedConstData, "hex").length);
 }
 
-export function COMMAND_APPEND_DATA_BUFFER_DO_NOT_SHOW(varData: Buffer, bufLenMin: number = 0, bufLenMax: number = 0xFFFFFFFF): Command {
-    return {
-        ...defaultCommand,
-        command: COMMAND.APPEND_DATA,
-        constData: constDataAppendData(
-            VALUE_FORMAT.VALUE_FORMAT_BUFFER_SHOW_AS_HEX,
-            VALUE_VALIDATION.VALUE_VALIDATION_INBUFFER_LENGTH, BigInt(bufLenMin), BigInt(bufLenMax),
-            VALUE_POLICY.VALUE_DO_NOT_SHOW_ON_DEVICE,
-            VALUE_STORAGE_COMPARE.DO_NOT_COMPARE,
-            ""
-        ),
-        varData: varData,
-        txLen: varData.length,
-    }
+export function COMMAND_SHOW_MESSAGE(commandBase: TxIndependentCommandBase): Command {
+    return makeCommandFromBase(commandBase);
 }
 
-export function COMMAND_APPEND_DATA_STRING_DO_NOT_SHOW(varData: Buffer, bufLenMin: number = 0, bufLenMax: number = 0xFFFFFFFF): Command {
-    return {
-        ...defaultCommand,
-        command: COMMAND.APPEND_DATA,
-        constData: constDataAppendData(
-            VALUE_FORMAT.VALUE_FORMAT_ASCII_STRING,
-            VALUE_VALIDATION.VALUE_VALIDATION_INBUFFER_LENGTH, BigInt(bufLenMin), BigInt(bufLenMax),
-            VALUE_POLICY.VALUE_DO_NOT_SHOW_ON_DEVICE,
-            VALUE_STORAGE_COMPARE.DO_NOT_COMPARE,
-            ""
-        ),
-        varData: varData,
-        txLen: varData.length,
-    }
+export function COMMAND_APPEND_DATA_BUFFER_DO_NOT_SHOW(commandBase: TxIndependentCommandBase, varData: Buffer): Command {
+    return makeCommandFromBase(commandBase, varData, varData.length);
 }
 
-export function COMMAND_APPEND_DATA_STRING_SHOW(key: string, varData: Buffer, bufLenMin: number = 0, bufLenMax: number = 0xFFFFFFFF): Command {
-    return {
-        ...defaultCommand,
-        command: COMMAND.APPEND_DATA,
-        constData: constDataAppendData(
-            VALUE_FORMAT.VALUE_FORMAT_ASCII_STRING,
-            VALUE_VALIDATION.VALUE_VALIDATION_INBUFFER_LENGTH, BigInt(bufLenMin), BigInt(bufLenMax),
-            VALUE_POLICY.VALUE_SHOW_ON_DEVICE,
-            VALUE_STORAGE_COMPARE.DO_NOT_COMPARE,
-            key
-        ),
-        varData: varData,
-        txLen: varData.length,
-    }
+export function COMMAND_APPEND_DATA_STRING_DO_NOT_SHOW(commandBase: TxIndependentCommandBase, varData: Buffer): Command {
+    return makeCommandFromBase(commandBase, varData, varData.length);
 }
 
-//calculates the length of varint
-export function lenlen(n: number): number {
-    return 1 + (n >= 128 ? 1 : 0) + (n >= 16384 ? 1 : 0) + (n >= 2097152 ? 1 : 0) + (n >= 268435456 ? 1 : 0)
+export function COMMAND_APPEND_DATA_STRING_SHOW(commandBase: TxIndependentCommandBase, varData: Buffer): Command {
+    return makeCommandFromBase(commandBase, varData, varData.length);
 }
 
-export function COMMAND_APPEND_DATA_STRING_WITH_LENGTH_DO_NOT_SHOW(varData: Buffer, bufLenMin: number = 0, bufLenMax: number = 0xFFFFFFFF): Command {
+export function COMMAND_APPEND_DATA_STRING_WITH_LENGTH_DO_NOT_SHOW(commandBase: TxIndependentCommandBase, varData: Buffer): Command {
     const vD = Buffer.concat([varuint32_to_buf(varData.length), varData]);
-    return {
-        ...defaultCommand,
-        command: COMMAND.APPEND_DATA,
-        constData: constDataAppendData(
-            VALUE_FORMAT.VALUE_FORMAT_ASCII_STRING_WITH_LENGTH,
-            VALUE_VALIDATION.VALUE_VALIDATION_INBUFFER_LENGTH, BigInt(bufLenMin + lenlen(bufLenMin)), BigInt(bufLenMax + lenlen(bufLenMax)),
-            VALUE_POLICY.VALUE_DO_NOT_SHOW_ON_DEVICE,
-            VALUE_STORAGE_COMPARE.DO_NOT_COMPARE,
-            ""
-        ),
-        varData: vD,
-        txLen: vD.length,
-    }
+    return makeCommandFromBase(commandBase, vD, vD.length);
 }
 
-export function COMMAND_APPEND_DATA_STRING_WITH_LENGTH_SHOW(key: string, varData: Buffer, bufLenMin: number = 0, bufLenMax: number = 0xFFFFFFFF): Command {
+export function COMMAND_APPEND_DATA_STRING_WITH_LENGTH_SHOW(commandBase: TxIndependentCommandBase, varData: Buffer): Command {
     const vD = Buffer.concat([varuint32_to_buf(varData.length), varData]);
-    return {
-        ...defaultCommand,
-        command: COMMAND.APPEND_DATA,
-        constData: constDataAppendData(
-            VALUE_FORMAT.VALUE_FORMAT_ASCII_STRING_WITH_LENGTH,
-            VALUE_VALIDATION.VALUE_VALIDATION_INBUFFER_LENGTH, BigInt(bufLenMin + lenlen(bufLenMin)), BigInt(bufLenMax + lenlen(bufLenMax)),
-            VALUE_POLICY.VALUE_SHOW_ON_DEVICE,
-            VALUE_STORAGE_COMPARE.DO_NOT_COMPARE,
-            key
-        ),
-        varData: vD,
-        txLen: vD.length,
-    }
+    return makeCommandFromBase(commandBase, vD, vD.length);
 }
 
-export function COMMAND_APPEND_DATA_STRING_WITH_LENGTH_SHOW_IF_NON_EMPTY(key: string, varData: Buffer, bufLenMin: number = 0, bufLenMax: number = 0xFFFFFFFF): Command {
+export function COMMAND_APPEND_DATA_STRING_WITH_LENGTH_SHOW_IF_NON_EMPTY(commandBase: TxIndependentCommandBase, varData: Buffer): Command {
     const vD = Buffer.concat([varuint32_to_buf(varData.length), varData]);
-    return {
-        ...defaultCommand,
-        command: COMMAND.APPEND_DATA,
-        constData: constDataAppendData(
-            VALUE_FORMAT.VALUE_FORMAT_ASCII_STRING_WITH_LENGTH,
-            VALUE_VALIDATION.VALUE_VALIDATION_INBUFFER_LENGTH, BigInt(bufLenMin + lenlen(bufLenMin)), BigInt(bufLenMax + lenlen(bufLenMax)),
-            VALUE_POLICY.VALUE_SHOW_ON_DEVICE_IF_NONEMPTY,
-            VALUE_STORAGE_COMPARE.DO_NOT_COMPARE,
-            key
-        ),
-        varData: vD,
-        txLen: vD.length,
-    }
+    return makeCommandFromBase(commandBase, vD, vD.length);
 }
 
-export function COMMAND_APPEND_DATA_NAME_SHOW(key: string, name: HexString): Command {
-    return {
-        ...defaultCommand,
-        command: COMMAND.APPEND_DATA,
-        constData: constDataAppendData(
-            VALUE_FORMAT.VALUE_FORMAT_NAME,
-            VALUE_VALIDATION.VALUE_VALIDATION_NONE, BigInt(0), BigInt(0),
-            VALUE_POLICY.VALUE_SHOW_ON_DEVICE,
-            VALUE_STORAGE_COMPARE.DO_NOT_COMPARE,
-            key
-        ),
-        varData: Buffer.from(name, "hex"),
-        txLen: Buffer.from(name, "hex").length,
-    }
+export function COMMAND_APPEND_DATA_NAME_SHOW(commandBase: TxIndependentCommandBase, name: HexString): Command {
+    const varData = Buffer.from(name, "hex");
+    return makeCommandFromBase(commandBase, varData, varData.length);
 }
 
-export function COMMAND_APPEND_DATA_FIO_AMOUNT_SHOW(key: string, varData: Buffer, minAmount: number = 0, maxAmount: bigint = BigInt("0x7FFFFFFFFFFFFFFF")): Command {
-    return {
-        ...defaultCommand,
-        command: COMMAND.APPEND_DATA,
-        constData: constDataAppendData(
-            VALUE_FORMAT.VALUE_FORMAT_FIO_AMOUNT,
-            VALUE_VALIDATION.VALUE_VALIDATION_NUMBER, BigInt(minAmount), BigInt(maxAmount),
-            VALUE_POLICY.VALUE_SHOW_ON_DEVICE,
-            VALUE_STORAGE_COMPARE.DO_NOT_COMPARE,
-            key
-        ),
-        varData: varData,
-        txLen: varData.length,
-    }
+export function COMMAND_APPEND_DATA_FIO_AMOUNT_SHOW(commandBase: TxIndependentCommandBase, varData: Buffer): Command {
+    return makeCommandFromBase(commandBase, varData, varData.length);
 }
 
-export function COMMAND_APPEND_DATA_UINT64_SHOW(key: string, varData: Buffer, minAmount: number = 0, maxAmount: bigint = BigInt("0x7FFFFFFFFFFFFFFF")): Command {
-    return {
-        ...defaultCommand,
-        command: COMMAND.APPEND_DATA,
-        constData: constDataAppendData(
-            VALUE_FORMAT.VALUE_FORMAT_UINT64,
-            VALUE_VALIDATION.VALUE_VALIDATION_NUMBER, BigInt(minAmount), BigInt(maxAmount),
-            VALUE_POLICY.VALUE_SHOW_ON_DEVICE,
-            VALUE_STORAGE_COMPARE.DO_NOT_COMPARE,
-            key
-        ),
-        varData: varData,
-        txLen: varData.length,
-    }
+export function COMMAND_APPEND_DATA_UINT64_SHOW(commandBase: TxIndependentCommandBase, varData: Buffer): Command {
+    return makeCommandFromBase(commandBase, varData, varData.length);
 }
 
-
-export function COMMANDS_COUNTED_SECTION(commands: Array<Command>, min: number = 0, max: number = 0xFFFFFFFF): Array<Command> {
-    const varData = varuint32_to_buf(getCommandVarLength(commands));
-    return [
-        {
-            ...defaultCommand,
-            command: COMMAND.START_COUNTED_SECTION,
-            constData: constDataStartCountedSection(
-                VALUE_FORMAT.VALUE_FORMAT_VARUINT32, VALUE_VALIDATION.VALUE_VALIDATION_NUMBER, BigInt(min), BigInt(max),
-            ),
-            varData: varData,
-            txLen: varData.length
-        },
-        ...commands,
-        {
-            ...defaultCommand,
-            command: COMMAND.END_COUNTED_SECTION,
-        }
-    ]
+export function COMMAND_START_COUNTED_SECTION(commandBase: TxIndependentCommandBase): Command {
+    return makeCommandFromBase(commandBase);
 }
 
-export function COMMAND_STORE_VALUE(register: Uint8_t, varData: Buffer): Command {
+export function COMMAND_END_COUNTED_SECTION(commandBase: TxIndependentCommandBase): Command {
+    return makeCommandFromBase(commandBase);
+}
+
+// export function COMMANDS_COUNTED_SECTION(commandBase: TxIndependentCommandBase, commands: Array<Command>): Array<Command> {
+//     const varData = varuint32_to_buf(getCommandVarLength(commands));
+//     return [
+//         {
+//             ...defaultCommand,
+//             command: commandBase.name,
+//             constData: commandBase.serializedConstData,
+//             varData: varData,
+//             txLen: varData.length
+//         },
+//         ...commands,
+//         {
+//             ...defaultCommand,
+//             command: COMMAND.END_COUNTED_SECTION,
+//         }
+//     ]
+// }
+
+export function COMMAND_STORE_VALUE(commandBase: TxIndependentCommandBase, varData: Buffer): Command {
     return {
         ...defaultCommand,
-        command: COMMAND.STORE_VALUE,
-        p2: register as Uint8_t,
+        command: commandBase.name,
+        p2: Buffer.from(commandBase.serializedConstData, "hex")[0] as Uint8_t, // register number
         varData: varData,
     }
 }
 
-export function COMMAND_FINISH(parsedPath: ValidBIP32Path): Command {
+// TODO investigate this, commandBase.serializedConstData is not used here, but it should maybe. Although it only contains the command name...
+export function COMMAND_FINISH(commandBase: TxIndependentCommandBase, parsedPath: ValidBIP32Path): Command {
     return {
         ...defaultCommand,
-        command: COMMAND.FINISH,
+        command: commandBase.name,
         expectedResponseLength: 65 + 32,
         dataAction: (b, s) => {
             const [witnessSignature, hash, rest] = chunkBy(b, [65, 32])
@@ -375,18 +267,14 @@ export function COMMAND_FINISH(parsedPath: ValidBIP32Path): Command {
     }
 }
 
-export function ADD_STORAGE_CHECK(check: VALUE_STORAGE_COMPARE, c: Command): Command {
-    const constData: Buffer = Buffer.from(c.constData, "hex")
-    const policyAndStorage: Uint8_t = constData[18] as Uint8_t
-    const newValue: Uint8_t = ((policyAndStorage & 0x0F) | check) as Uint8_t
-    constData.writeUInt8(newValue, 18)
+export function ADD_STORAGE_CHECK(commandBase: TxIndependentCommandBase, c: Command): Command {
     return {
         ...c,
-        constData: constData.toString("hex") as HexString,
+        constData: commandBase.serializedConstData,
     }
 }
 
-export function COMMAND_APPEND_DATA_MEMO_HASH(memo?: VarlenAsciiString, hash?: VarlenAsciiString, offline_url?: VarlenAsciiString): Command {
+export function COMMAND_APPEND_DATA_MEMO_HASH(commandBase: TxIndependentCommandBase, memo?: VarlenAsciiString, hash?: VarlenAsciiString, offline_url?: VarlenAsciiString): Command {
     var varData: Buffer = Buffer.from("");
     if (memo === undefined) {
         validate(hash !== undefined, InvalidDataReason.INVALID_HASH);
@@ -410,23 +298,11 @@ export function COMMAND_APPEND_DATA_MEMO_HASH(memo?: VarlenAsciiString, hash?: V
             Buffer.from("0000", "hex"),
         ])
     }
-    return {
-        ...defaultCommand,
-        command: COMMAND.APPEND_DATA,
-        constData: constDataAppendData(
-            VALUE_FORMAT.VALUE_FORMAT_MEMO_HASH,
-            VALUE_VALIDATION.VALUE_VALIDATION_NONE, BigInt(0), BigInt(0),
-            VALUE_POLICY.VALUE_DO_NOT_SHOW_ON_DEVICE,
-            VALUE_STORAGE_COMPARE.DO_NOT_COMPARE,
-            ""
-        ),
-        varData: varData,
-        txLen: varData.length,
-    }
+    return makeCommandFromBase(commandBase, varData, varData.length);
 }
 
 
-export function COMMAND_APPEND_DATA_CHAIN_CODE_TOKEN_CODE_PUBLIC_ADDR_SHOW(key: string, chainCode: VarlenAsciiString, tokenCode: VarlenAsciiString, publicAddr: VarlenAsciiString): Command {
+export function COMMAND_APPEND_DATA_CHAIN_CODE_TOKEN_CODE_PUBLIC_ADDR_SHOW(commandBase: TxIndependentCommandBase, chainCode: VarlenAsciiString, tokenCode: VarlenAsciiString, publicAddr: VarlenAsciiString): Command {
     const varData: Buffer = Buffer.concat([
         varuint32_to_buf(tokenCode.length),
         Buffer.from(tokenCode),
@@ -434,39 +310,15 @@ export function COMMAND_APPEND_DATA_CHAIN_CODE_TOKEN_CODE_PUBLIC_ADDR_SHOW(key: 
         Buffer.from(chainCode),
         varuint32_to_buf(publicAddr.length),
         Buffer.from(publicAddr),
-    ])
-    return {
-        ...defaultCommand,
-        command: COMMAND.APPEND_DATA,
-        constData: constDataAppendData(
-            VALUE_FORMAT.VALUE_FORMAT_CHAIN_CODE_TOKEN_CODE_PUBLIC_ADDR,
-            VALUE_VALIDATION.VALUE_VALIDATION_NONE, BigInt(0), BigInt(0),
-            VALUE_POLICY.VALUE_SHOW_ON_DEVICE,
-            VALUE_STORAGE_COMPARE.DO_NOT_COMPARE,
-            key
-        ),
-        varData: varData,
-        txLen: varData.length,
-    }
+    ]);
+    return makeCommandFromBase(commandBase, varData, varData.length);
 }
 
-export function COMMAND_START_FOR_LOOP(minIterations: number, maxIterations: number): Command {
-    const MIN_ITERATIONS_SIZE = 4;
-    const MAX_ITERATIONS_SIZE = 4;
-    const buf = Buffer.allocUnsafe(MIN_ITERATIONS_SIZE + MAX_ITERATIONS_SIZE);
-    // TODO don't we really need allowedIterationsHash? I think we don't as the Merkle tree solves this.
-    buf.writeUInt32LE(minIterations, 0);
-    buf.writeUInt32LE(maxIterations, MIN_ITERATIONS_SIZE);
-    return {
-        ...defaultCommand,
-        command: COMMAND.START_FOR,
-        constData: buf.toString("hex") as HexString
-    }
+// TODO how to work with children reasonably?
+export function COMMAND_START_FOR_LOOP(commandBase: TxIndependentCommandBase): Command {
+    return makeCommandFromBase(commandBase);
 }
 
-export function COMMAND_END_FOR_LOOP(): Command {
-    return {
-        ...defaultCommand,
-        command: COMMAND.END_FOR,
-    }
+export function COMMAND_END_FOR_LOOP(commandBase: TxIndependentCommandBase): Command {
+    return makeCommandFromBase(commandBase);
 }

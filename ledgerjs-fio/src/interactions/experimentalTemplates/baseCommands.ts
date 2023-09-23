@@ -1,8 +1,9 @@
 import { COMMAND, VALUE_FORMAT, VALUE_VALIDATION, VALUE_POLICY, VALUE_STORAGE_COMPARE } from "./commands";
-import { constDataShowMessage, constDataAppendData, constDataStartCountedSection, lenlen } from "./commands";
+import { constDataShowMessage, constDataAppendData, constDataStartCountedSection } from "./commands";
 import { Buffer } from "buffer";
 import { HexString, Uint8_t, Uint32_t } from "types/internal";
 import { uint32_to_buf } from "utils/serialize";
+import { lenlen } from "./utils/utils";
 
 
 export type TxIndependentCommandBase = {
@@ -174,23 +175,40 @@ export function BASE_COMMAND_APPEND_DATA_UINT64_SHOW(key: string, minAmount: num
     }
 }
 
-
-export function BASE_COMMANDS_COUNTED_SECTION(commandBases: Array<TxIndependentCommandBase>, min: number = 0, max: number = 0xFFFFFFFF): Array<TxIndependentCommandBase> {
-    return [
-        {
-            ...defaultCommandBase,
-            name: COMMAND.START_COUNTED_SECTION,
-            serializedConstData: constDataStartCountedSection(
-                VALUE_FORMAT.VALUE_FORMAT_VARUINT32, VALUE_VALIDATION.VALUE_VALIDATION_NUMBER, BigInt(min), BigInt(max),
-            ),
-        },
-        ...commandBases,
-        {
-            ...defaultCommandBase,
-            name: COMMAND.END_COUNTED_SECTION,
-        }
-    ]
+export function BASE_COMMAND_START_COUNTED_SECTION(min: number = 0, max: number = 0xFFFFFFFF): TxIndependentCommandBase {
+    return {
+        ...defaultCommandBase,
+        name: COMMAND.START_COUNTED_SECTION,
+        serializedConstData: constDataStartCountedSection(
+            VALUE_FORMAT.VALUE_FORMAT_VARUINT32, VALUE_VALIDATION.VALUE_VALIDATION_NUMBER, BigInt(min), BigInt(max),
+        ),
+    }
 }
+
+export function BASE_COMMAND_END_COUNTED_SECTION(): TxIndependentCommandBase {
+    return {
+        ...defaultCommandBase,
+        name: COMMAND.END_COUNTED_SECTION,
+    }
+}
+
+
+// export function BASE_COMMANDS_COUNTED_SECTION(commandBases: Array<TxIndependentCommandBase>, min: number = 0, max: number = 0xFFFFFFFF): Array<TxIndependentCommandBase> {
+//     return [
+//         {
+//             ...defaultCommandBase,
+//             name: COMMAND.START_COUNTED_SECTION,
+//             serializedConstData: constDataStartCountedSection(
+//                 VALUE_FORMAT.VALUE_FORMAT_VARUINT32, VALUE_VALIDATION.VALUE_VALIDATION_NUMBER, BigInt(min), BigInt(max),
+//             ),
+//         },
+//         ...commandBases,
+//         {
+//             ...defaultCommandBase,
+//             name: COMMAND.END_COUNTED_SECTION,
+//         }
+//     ]
+// }
 
 export function BASE_COMMAND_STORE_VALUE(register: Uint8_t): TxIndependentCommandBase {
     return {
@@ -249,9 +267,6 @@ export function BASE_COMMAND_APPEND_DATA_CHAIN_CODE_TOKEN_CODE_PUBLIC_ADDR_SHOW(
 }
 
 export function BASE_COMMAND_START_FOR_LOOP(allowedIterations: Array<TxIndependentCommandBase>, minIterations: Uint32_t, maxIterations: Uint32_t): TxIndependentCommandBase {
-    const MIN_ITERATIONS_SIZE = 4;
-    const MAX_ITERATIONS_SIZE = 4;
-    const buf = Buffer.allocUnsafe(MIN_ITERATIONS_SIZE + MAX_ITERATIONS_SIZE);
     // We don't need allowedIterationsHash as the Merkle tree solves this
     const serializedConstData = Buffer.concat([
         uint32_to_buf(minIterations),

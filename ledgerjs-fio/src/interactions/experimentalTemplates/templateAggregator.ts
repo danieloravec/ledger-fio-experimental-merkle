@@ -33,9 +33,11 @@ const makeEndCommands = (): Array<TxIndependentCommandBase> => {
 
 const aggregateAllTemplates = (): Array<TxIndependentCommandBase> => {
     // TODO be careful about the order of templates. The order will affect the hash tree.
-    const templateBases = [
+    let templateBases = [
         template_base_trnsfiopubky
-    ];
+    ].map(templateBase => {
+        return () => templateBase().map(commandInfo => commandInfo.commandBase)
+    });
 
     return templateBases.map(base => {
         return [
