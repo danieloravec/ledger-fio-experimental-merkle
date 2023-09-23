@@ -1,4 +1,4 @@
-import { TxIndependentCommandBase } from "./commands";
+import { TxIndependentCommandBase } from "./baseCommands";
 import { HexString } from "types/internal";
 
 

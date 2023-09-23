@@ -8,6 +8,7 @@ import { uint32_to_buf } from "utils/serialize";
 export type TxIndependentCommandBase = {
     name: COMMAND,
     serializedConstData: HexString,
+    children?: Array<TxIndependentCommandBase>,
 }
 
 //---------------------INSTRUCTION SPECIFIC BASE COMMANDS---------------------------------
@@ -15,6 +16,10 @@ export type TxIndependentCommandBase = {
 const defaultCommandBase: TxIndependentCommandBase = {
     name: COMMAND.NONE,
     serializedConstData: Buffer.from("").toString("hex") as HexString,
+}
+
+export function BASE_COMMAND_NONE(): TxIndependentCommandBase {
+    return defaultCommandBase;
 }
 
 export function BASE_COMMAND_INIT(): TxIndependentCommandBase {
@@ -243,11 +248,11 @@ export function BASE_COMMAND_APPEND_DATA_CHAIN_CODE_TOKEN_CODE_PUBLIC_ADDR_SHOW(
     }
 }
 
-export function BASE_COMMAND_START_FOR_LOOP(minIterations: Uint32_t, maxIterations: Uint32_t): TxIndependentCommandBase {
+export function BASE_COMMAND_START_FOR_LOOP(allowedIterations: Array<TxIndependentCommandBase>, minIterations: Uint32_t, maxIterations: Uint32_t): TxIndependentCommandBase {
     const MIN_ITERATIONS_SIZE = 4;
     const MAX_ITERATIONS_SIZE = 4;
     const buf = Buffer.allocUnsafe(MIN_ITERATIONS_SIZE + MAX_ITERATIONS_SIZE);
-    // TODO don't we really need allowedIterationsHash? I think we don't as the Merkle tree solves this.
+    // We don't need allowedIterationsHash as the Merkle tree solves this
     const serializedConstData = Buffer.concat([
         uint32_to_buf(minIterations),
         uint32_to_buf(maxIterations),
@@ -256,6 +261,7 @@ export function BASE_COMMAND_START_FOR_LOOP(minIterations: Uint32_t, maxIteratio
         ...defaultCommandBase,
         name: COMMAND.START_FOR,
         serializedConstData,
+        children: allowedIterations,
     }
 }
 

@@ -1,4 +1,11 @@
-import { COMMAND, TxIndependentCommandBase } from "./commands";
+import {
+    TxIndependentCommandBase,
+    BASE_COMMAND_INIT,
+    BASE_COMMAND_APPEND_DATA_BUFFER_DO_NOT_SHOW,
+    BASE_COMMAND_FINISH,
+    BASE_COMMAND_APPEND_CONST_DATA,
+    BASE_COMMAND_NONE
+} from "./baseCommands";
 import { template_base_trnsfiopubky } from "./txIndependent/template_base_trnsfiopubky"
 import { HexString } from "types/internal";
 import { findNextPowerOfTwo } from "./utils/utils";
@@ -11,39 +18,16 @@ const DFS_BFS_ID_NO_VALUE = 0xffffffff;
 
 const makeInitCommands = (): Array<TxIndependentCommandBase> => {
     return [
-        {
-            name: COMMAND.INIT,
-            params: {},
-        },
-        {
-            name: COMMAND.APPEND_DATA,
-            params: {
-                minBufLen: 10,
-                maxBufLen: 10,
-                show: false
-            }
-        },
-        {
-            name: COMMAND.APPEND_CONST_DATA,
-            params: {
-                data: "0000000001" as HexString
-            },
-        },
+        BASE_COMMAND_INIT(),
+        BASE_COMMAND_APPEND_DATA_BUFFER_DO_NOT_SHOW(10, 10),
+        BASE_COMMAND_APPEND_CONST_DATA("0000000001" as HexString),
     ];
 }
 
 const makeEndCommands = (): Array<TxIndependentCommandBase> => {
     return [
-        {
-            name: COMMAND.APPEND_CONST_DATA,
-            params: {
-                data: "000000000000000000000000000000000000000000000000000000000000000000" as HexString,
-            }
-        },
-        {
-            name: COMMAND.FINISH,
-            params: {},
-        }
+        BASE_COMMAND_APPEND_CONST_DATA("000000000000000000000000000000000000000000000000000000000000000000" as HexString),
+        BASE_COMMAND_FINISH(),
     ];
 }
 
@@ -67,9 +51,9 @@ const aggregateAllTemplates = (): Array<TxIndependentCommandBase> => {
 const addPaddingToCommands = (commands: Array<TxIndependentCommandBase>): Array<TxIndependentCommandBase> => {
     const updatedCommands: Array<TxIndependentCommandBase> = [];
     for (const command of commands) {
-        if (command.name === COMMAND.START_FOR) {
-            const paddedChildCommands = addPaddingToCommands(command.params.children);
-            command.params.children = paddedChildCommands;
+        if (command.children) {
+            const paddedChildCommands = addPaddingToCommands(command.children);
+            command.children = paddedChildCommands;
         } else {
             updatedCommands.push(command);
         }
@@ -79,10 +63,7 @@ const addPaddingToCommands = (commands: Array<TxIndependentCommandBase>): Array<
     // This way, the root of the tree will always be a NonCommandMerkleNode. That's why there's Math.max in the next line.
     const numOfPaddingCommands = Math.max(findNextPowerOfTwo(updatedCommands.length), 2) - updatedCommands.length;
     for (let i = 0; i < numOfPaddingCommands; i++) {
-        updatedCommands.push({
-            name: COMMAND.NONE,
-            params: {}
-        });
+        updatedCommands.push(BASE_COMMAND_NONE());
     }
 
     return updatedCommands;
@@ -99,8 +80,8 @@ const buildPlainTreeFromPaddedCommands = (commands: Array<TxIndependentCommandBa
             commandBase: command,
             side
         };
-        if (command.name === COMMAND.START_FOR) {
-            const childTreeRootNonCommand = buildPlainTreeFromPaddedCommands(command.params.children);
+        if (command.children) {
+            const childTreeRootNonCommand = buildPlainTreeFromPaddedCommands(command.children);
             // Transform the new root into a command one
             commandNode = {
                 ...childTreeRootNonCommand,
@@ -183,27 +164,10 @@ const addBfsIdsToTree = (root: MerkleNodeWithoutHash): MerkleNodeWithoutHash => 
 }
 
 const serializeCommandBase = (commandBase: TxIndependentCommandBase): Buffer => {
-    const commandTypeBuffer = Buffer.from([commandBase.name]);
-
-    let constDataBuffer = Buffer.from("");
-    if (commandBase.name === COMMAND.START_FOR) {
-        // Min number of iterations as 4 bytes
-        // Max number of iterations as 4 bytes
-        // No need for hash of allowed iterations, this is solved by the Merkle tree itself
-        const minNumOfIterationsBuffer = Buffer.alloc(4);
-        minNumOfIterationsBuffer.writeUInt32LE(commandBase.params.minNumOfIterations, 0);
-        const maxNumOfIterationsBuffer = Buffer.alloc(4);
-        maxNumOfIterationsBuffer.writeUInt32LE(commandBase.params.maxNumOfIterations, 0);
-        constDataBuffer = Buffer.concat([minNumOfIterationsBuffer, maxNumOfIterationsBuffer]);
-    } else if (commandBase.name === COMMAND.SHOW_MESSAGE) {
-        constDataBuffer = Buffer.from(commandBase.params.key, 'utf-8');
-    } else if (commandBase.name === COMMAND.START_COUNTED_SECTION) {
-        const expectedLengthBuffer = Buffer.alloc(4);
-        expectedLengthBuffer.writeUInt32LE(commandBase.params.expectedLength, 0);
-        constDataBuffer = expectedLengthBuffer;
-    }
-    // TODO add other command types here, fix ones already added (which constant params they have in command base, number of bytes per field etc.)
-    return Buffer.concat([commandTypeBuffer, constDataBuffer]);
+    return Buffer.concat([
+        Buffer.from([commandBase.name]),
+        Buffer.from(commandBase.serializedConstData, "hex")
+    ]);
 }
 
 // This takes up 9 bytes:
