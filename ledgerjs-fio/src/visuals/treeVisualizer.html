@@ -23,6 +23,7 @@
     <script>
         const Y_DELTA = 300;
         const TEXT_ROW_HEIGHT = 20;
+        const DFS_BFS_ID_NO_VALUE = 0xffffffff;
 
         const canvas = document.getElementById('treeCanvas');
         canvas.width = window.innerWidth * 2;
@@ -33,15 +34,25 @@
             if (!treeRepr) {
                 return;
             }
-            const textRows = [
-                `DFS:`,
-                `  in: ${treeRepr.dfsId.inTime}`,
-                `  out: ${treeRepr.dfsId.outTime}`,
-                `BFS:`,
-                `  level: ${treeRepr.bfsId.commandLevel}`,
-                `  seq: ${treeRepr.bfsId.levelSeqNumber}`,
-                `HASH: ${treeRepr.hash.substring(0, 4)}...${treeRepr.hash.substring(treeRepr.hash.length - 4)}`,
-            ];
+            const textRows = [];
+            if (treeRepr.dfsId.inTime != DFS_BFS_ID_NO_VALUE) {
+                textRows.push(...[
+                    `DFS:`,
+                    `  in: ${treeRepr.dfsId.inTime}`,
+                    `  out: ${treeRepr.dfsId.outTime}`,
+                ]);
+            }
+            if (treeRepr.bfsId.commandLevel != DFS_BFS_ID_NO_VALUE) {
+                textRows.push(...[
+                    `BFS:`,
+                    `  level: ${treeRepr.bfsId.commandLevel}`,
+                    `  seq: ${treeRepr.bfsId.levelSeqNumber}`,
+                ]);
+            }
+            textRows.push(...[
+                `HASH:`,
+                `  ${treeRepr.hash.substring(0, 3)}..${treeRepr.hash.substring(treeRepr.hash.length - 3)}`,
+            ]);
             const midX = (regionX1 + regionX2) / 2;
             for (let i = 0; i < textRows.length; i++) {
                 ctx.fillText(textRows[i], midX, regionY + TEXT_ROW_HEIGHT * i, regionX2 - regionX1);

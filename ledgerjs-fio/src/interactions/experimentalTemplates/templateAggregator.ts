@@ -129,7 +129,6 @@ const addDfsIdsToTree = (root: MerkleNodeWithoutHash): MerkleNodeWithoutHash => 
         dfsId.outTime = currTime;
         currTime++;
         node.dfsId = dfsId;
-        console.log(JSON.stringify(node.dfsId));
         return dfsId;
     }
     addDfsIdsToNode(root);
