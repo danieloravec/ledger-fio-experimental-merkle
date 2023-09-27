@@ -13,9 +13,7 @@ import {
     BASE_COMMAND_APPEND_DATA_STRING_WITH_LENGTH_SHOW,
     BASE_COMMAND_APPEND_DATA_FIO_AMOUNT_SHOW,
     BASE_COMMAND_APPEND_DATA_STRING_WITH_LENGTH_DO_NOT_SHOW,
-    // BASE_COMMAND_START_COUNTED_SECTION,
-    // BASE_COMMAND_END_COUNTED_SECTION,
-    BASE_COMMAND_START_FOR_LOOP,
+    BASE_COMMAND_FOR_LOOP
 } from "../baseCommands";
 
 
@@ -39,6 +37,23 @@ export function template_base_trnsfiopubky(): Array<TxIndependentCommandBase> {
                 BASE_COMMAND_APPEND_DATA_BUFFER_DO_NOT_SHOW(8, 8)),
             BASE_COMMAND_APPEND_DATA_STRING_WITH_LENGTH_DO_NOT_SHOW(),
         ]),
+        // TODO remove the part below, it is just a testing garbage
+        BASE_COMMAND_FOR_LOOP([
+            [
+                BASE_COMMAND_SHOW_MESSAGE("Hello", "Test"),
+                BASE_COMMAND_APPEND_DATA_STRING_WITH_LENGTH_SHOW("Some string"),
+                BASE_COMMAND_APPEND_DATA_STRING_WITH_LENGTH_SHOW("Another string"),
+            ],
+            [
+                BASE_COMMAND_SHOW_MESSAGE("Key", "Value"),
+                ...BASE_COMMANDS_COUNTED_SECTION([
+                    BASE_COMMAND_APPEND_DATA_STRING_WITH_LENGTH_SHOW("Something"),
+                    BASE_COMMAND_APPEND_DATA_STRING_WITH_LENGTH_SHOW("Something else"),
+                ])
+            ]
+        ], 1 as Uint32_t, 6 as Uint32_t),
+        BASE_COMMAND_STORE_VALUE(1 as Uint8_t),
+        BASE_COMMAND_SHOW_MESSAGE("Padding", "Fill"),
     ];
 }
 

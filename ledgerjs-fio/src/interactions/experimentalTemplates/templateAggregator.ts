@@ -32,7 +32,7 @@ const makeEndCommands = (): Array<TxIndependentCommandBase> => {
 }
 
 const aggregateAllTemplates = (): Array<TxIndependentCommandBase> => {
-    // TODO be careful about the order of templates. The order will affect the hash tree.
+    // Be careful about the order of templates. The order will affect the hash tree.
     let templateBases = [
         template_base_trnsfiopubky
     ];
@@ -54,9 +54,8 @@ const addPaddingToCommands = (commands: Array<TxIndependentCommandBase>): Array<
         if (command.children) {
             const paddedChildCommands = addPaddingToCommands(command.children);
             command.children = paddedChildCommands;
-        } else {
-            updatedCommands.push(command);
         }
+        updatedCommands.push(command);
     }
 
     // For the ease of implementation, we always want at least 2 command nodes on each "command" level.

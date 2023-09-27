@@ -266,8 +266,34 @@ export function BASE_COMMAND_APPEND_DATA_CHAIN_CODE_TOKEN_CODE_PUBLIC_ADDR_SHOW(
     }
 }
 
+function BASE_WRAP_AS_ITERATION(iterationCommands: Array<TxIndependentCommandBase>): Array<TxIndependentCommandBase> {
+    return [
+        {
+            ...defaultCommandBase,
+            name: COMMAND.START_ITERATION,
+        },
+        ...iterationCommands,
+        {
+            ...defaultCommandBase,
+            name: COMMAND.END_ITERATION,
+        },
+    ]
+}
+
+export function BASE_COMMAND_FOR_LOOP(allowedIterations: Array<Array<TxIndependentCommandBase>>, minIterations: Uint32_t, maxIterations: Uint32_t): TxIndependentCommandBase {
+    const serializedConstData = Buffer.concat([
+        uint32_to_buf(minIterations),
+        uint32_to_buf(maxIterations),
+    ]).toString('hex') as HexString;
+    return {
+        ...defaultCommandBase,
+        name: COMMAND.START_FOR, // This is actually not START_FOR, but only FOR, but the name is not really used anywhere anyway.
+        serializedConstData,
+        children: allowedIterations.map(BASE_WRAP_AS_ITERATION).flat(),
+    }
+}
+
 export function BASE_COMMAND_START_FOR_LOOP(allowedIterations: Array<TxIndependentCommandBase>, minIterations: Uint32_t, maxIterations: Uint32_t): TxIndependentCommandBase {
-    // We don't need allowedIterationsHash as the Merkle tree solves this
     const serializedConstData = Buffer.concat([
         uint32_to_buf(minIterations),
         uint32_to_buf(maxIterations),
@@ -284,5 +310,19 @@ export function BASE_COMMAND_END_FOR_LOOP(): TxIndependentCommandBase {
     return {
         ...defaultCommandBase,
         name: COMMAND.END_FOR,
+    }
+}
+
+export function BASE_COMMAND_START_ITERATION(): TxIndependentCommandBase {
+    return {
+        ...defaultCommandBase,
+        name: COMMAND.START_ITERATION,
+    }
+}
+
+export function BASE_COMMAND_END_ITERATION(): TxIndependentCommandBase {
+    return {
+        ...defaultCommandBase,
+        name: COMMAND.END_ITERATION,
     }
 }

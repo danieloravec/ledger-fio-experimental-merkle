@@ -17,8 +17,8 @@ export const enum COMMAND {
     STORE_VALUE = 0x07,
     START_FOR = 0x08,
     END_FOR = 0x09,
-    START_ITER = 0x0A,
-    END_ITER = 0x0B,
+    START_ITERATION = 0x0A,
+    END_ITERATION = 0x0B,
     FINISH = 0x0C,
 };
 
@@ -448,6 +448,36 @@ export function COMMAND_APPEND_DATA_CHAIN_CODE_TOKEN_CODE_PUBLIC_ADDR_SHOW(key: 
         txLen: varData.length,
     }
 }
+
+export function WRAP_AS_ITERATION(iterationCommands: Array<Command>): Array<Command> {
+    return [
+        {
+            ...defaultCommand,
+            command: COMMAND.START_ITERATION,
+        },
+        ...iterationCommands,
+        {
+            ...defaultCommand,
+            command: COMMAND.END_ITERATION,
+        }
+    ];
+}
+
+export function COMMANDS_FOR_LOOP(iterations: Array<Array<Command>>): Array<Command> {
+    return [
+        {
+            ...defaultCommand,
+            command: COMMAND.START_FOR,
+        },
+        ...iterations.map(WRAP_AS_ITERATION).flat(),
+        {
+            ...defaultCommand,
+            command: COMMAND.END_FOR,
+        }
+    ]
+}
+
+
 
 
 
