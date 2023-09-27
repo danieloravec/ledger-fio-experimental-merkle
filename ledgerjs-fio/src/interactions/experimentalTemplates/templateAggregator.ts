@@ -114,19 +114,22 @@ const buildPlainTreeFromPaddedCommands = (commands: Array<TxIndependentCommandBa
 }
 
 const addDfsIdsToTree = (root: MerkleNodeWithoutHash): MerkleNodeWithoutHash => {
-    let inTime = 0;
+    let currTime = 0;
     const addDfsIdsToNode = (node: MerkleNodeWithoutHash): DfsNodeId => {
         const dfsId: DfsNodeId = {
-            inTime,
+            inTime: currTime,
             outTime: DFS_BFS_ID_NO_VALUE,
         };
-        inTime++;
+        currTime++;
         [node.leftChild, node.rightChild].forEach(child => {
             if (child) {
-                dfsId.outTime = addDfsIdsToNode(child).outTime;
+                addDfsIdsToNode(child);
             }
         });
+        dfsId.outTime = currTime;
+        currTime++;
         node.dfsId = dfsId;
+        console.log(JSON.stringify(node.dfsId));
         return dfsId;
     }
     addDfsIdsToNode(root);

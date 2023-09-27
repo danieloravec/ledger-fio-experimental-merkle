@@ -9,6 +9,7 @@ const writeMerkleTreeToFile = () => {
 
 const printUrl = () => {
     console.log('Please visit: file://' + __dirname + '/treeVisualizer.html');
+    console.log(`Then paste contents of dist/visuals/merkleTree.json into the text box and push the button.`);
 }
 
 writeMerkleTreeToFile();

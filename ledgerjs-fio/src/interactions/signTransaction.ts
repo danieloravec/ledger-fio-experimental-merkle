@@ -18,7 +18,6 @@ const send = (params: {
     expectedResponseLength?: number
 }): SendParams => ({ ins: INS.SIGN_TX, ...params })
 
-
 export function* signTransaction(version: Version, parsedPath: ValidBIP32Path, chainId: HexString, tx: ParsedTransaction): Interaction<SignedTransactionData> {
 
     // ensureLedgerAppVersionCompatible(version) // TODO uncommment this
