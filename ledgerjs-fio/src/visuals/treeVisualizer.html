@@ -35,14 +35,14 @@
                 return;
             }
             const textRows = [];
-            if (treeRepr.dfsId.inTime != DFS_BFS_ID_NO_VALUE) {
+
+            const isCommandNode = treeRepr.bfsId.commandLevel != DFS_BFS_ID_NO_VALUE;
+            if (isCommandNode) {
                 textRows.push(...[
                     `DFS:`,
                     `  in: ${treeRepr.dfsId.inTime}`,
                     `  out: ${treeRepr.dfsId.outTime}`,
                 ]);
-            }
-            if (treeRepr.bfsId.commandLevel != DFS_BFS_ID_NO_VALUE) {
                 textRows.push(...[
                     `BFS:`,
                     `  level: ${treeRepr.bfsId.commandLevel}`,
@@ -65,9 +65,16 @@
                 ctx.stroke();
             }
 
+            const regionWidth = regionX2 - regionX1;
             const textBottomY = regionY + TEXT_ROW_HEIGHT * textRows.length;
-            drawTree(treeRepr.leftChild, regionY + Y_DELTA, regionX1, midX, midX, textBottomY);
-            drawTree(treeRepr.rightChild, regionY + Y_DELTA, midX, regionX2, midX, textBottomY);
+            if (isCommandNode) {
+                // There is END_FOR to the left and right of us at least, so we can use a wider region for subtree
+                drawTree(treeRepr.leftChild, regionY + Y_DELTA, Math.max(0, regionX1 - regionWidth), midX, midX, textBottomY);
+                drawTree(treeRepr.rightChild, regionY + Y_DELTA, midX, Math.min(canvas.width, regionX2 + regionWidth), midX, textBottomY);
+            } else {
+                drawTree(treeRepr.leftChild, regionY + Y_DELTA, regionX1, midX, midX, textBottomY);
+                drawTree(treeRepr.rightChild, regionY + Y_DELTA, midX, regionX2, midX, textBottomY);
+            }
         }
 
         function visualizeTree() {
