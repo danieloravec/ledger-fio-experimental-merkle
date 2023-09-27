@@ -9,6 +9,7 @@ import type { Interaction, SendParams } from "./common/types"
 import { ensureLedgerAppVersionCompatible } from "./getVersion"
 import { templete_all } from "./transactionTemplates/template_all"
 import { buildMerkleTree } from "./experimentalTemplates/templateAggregator"
+import * as fs from 'fs';
 
 const send = (params: {
     p1: number,
@@ -19,7 +20,8 @@ const send = (params: {
 
 
 export function* signTransaction(version: Version, parsedPath: ValidBIP32Path, chainId: HexString, tx: ParsedTransaction): Interaction<SignedTransactionData> {
-    ensureLedgerAppVersionCompatible(version)
+
+    // ensureLedgerAppVersionCompatible(version) // TODO uncommment this
 
     const merkleTree = buildMerkleTree(); // TODO finalize implemeting this first and then test it
 
@@ -27,6 +29,7 @@ export function* signTransaction(version: Version, parsedPath: ValidBIP32Path, c
     validate(commands.length != 0, InvalidDataReason.ACTION_NOT_SUPPORTED);
 
     let result: SignedTransactionData = { dhEncryptedData: "", txHashHex: "", witness: { path: parsedPath, witnessSignatureHex: "" } };
+    return result;  // TODO remove this
 
     for (const command of commands) {
         validate(command.constData.length + command.varData.length + 2 <= 255, InvalidDataReason.UNEXPECTED_ERROR);

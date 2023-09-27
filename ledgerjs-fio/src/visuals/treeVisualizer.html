@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Tree Visualization</title>
+    <style>
+        body {
+            margin: 0;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <div>
+        <textarea id="jsonInput" placeholder="Paste JSON here"></textarea>
+        <button onclick="visualizeTree()">Visualize Tree</button>
+    </div>
+    <canvas id="treeCanvas" height="10000px" style="border:1px solid red;"></canvas>
+    <script>
+        const Y_DELTA = 300;
+        const TEXT_ROW_HEIGHT = 20;
+
+        const canvas = document.getElementById('treeCanvas');
+        canvas.width = window.innerWidth * 2;
+        canvas.height = 10000;
+        const ctx = canvas.getContext('2d');
+
+        function drawTree(treeRepr, regionY, regionX1, regionX2, parentX, parentY) {
+            if (!treeRepr) {
+                return;
+            }
+            const textRows = [
+                `DFS:`,
+                `  in: ${treeRepr.dfsId.inTime}`,
+                `  out: ${treeRepr.dfsId.outTime}`,
+                `BFS:`,
+                `  level: ${treeRepr.bfsId.commandLevel}`,
+                `  seq: ${treeRepr.bfsId.levelSeqNumber}`,
+                `HASH: ${treeRepr.hash.substring(0, 4)}...${treeRepr.hash.substring(treeRepr.hash.length - 4)}`,
+            ];
+            const midX = (regionX1 + regionX2) / 2;
+            for (let i = 0; i < textRows.length; i++) {
+                ctx.fillText(textRows[i], midX, regionY + TEXT_ROW_HEIGHT * i, regionX2 - regionX1);
+            }
+
+            if (parentX && parentY) {
+                ctx.beginPath();
+                ctx.moveTo(parentX, parentY);
+                ctx.lineTo(midX, regionY - TEXT_ROW_HEIGHT);
+                ctx.stroke();
+            }
+
+            const textBottomY = regionY + TEXT_ROW_HEIGHT * textRows.length;
+            drawTree(treeRepr.leftChild, regionY + Y_DELTA, regionX1, midX, midX, textBottomY);
+            drawTree(treeRepr.rightChild, regionY + Y_DELTA, midX, regionX2, midX, textBottomY);
+        }
+
+        function visualizeTree() {
+            const jsonInput = document.getElementById('jsonInput').value;
+            const data = JSON.parse(jsonInput);
+            drawTree(data, TEXT_ROW_HEIGHT, 0, canvas.width);
+        }
+    </script>
+</body>
+
+</html>

@@ -18,18 +18,19 @@ export function templete_all(chainId: HexString, tx: ParsedTransaction, parsedPa
     if (actionCommands.length == 0) return [];
 
     return [
-        COMMAND_INIT(BASE_COMMAND_INIT(), chainId, parsedPath),
+        COMMAND_INIT(chainId, parsedPath),
         COMMAND_APPEND_DATA_BUFFER_DO_NOT_SHOW(
-            BASE_COMMAND_APPEND_DATA_BUFFER_DO_NOT_SHOW(10, 10),
             Buffer.concat([
                 date_to_buf(tx.expiration).reverse(),
                 uint16_to_buf(tx.ref_block_num).reverse(),
                 uint32_to_buf(tx.ref_block_prefix).reverse()
-            ])
+            ]),
+            10,
+            10
         ),
-        COMMAND_APPEND_CONST_DATA(BASE_COMMAND_APPEND_CONST_DATA("0000000001" as HexString)),
+        COMMAND_APPEND_CONST_DATA("0000000001" as HexString),
         ...actionCommands,
-        COMMAND_APPEND_CONST_DATA(BASE_COMMAND_APPEND_CONST_DATA("000000000000000000000000000000000000000000000000000000000000000000" as HexString)),
-        COMMAND_FINISH(BASE_COMMAND_FINISH(), parsedPath),
+        COMMAND_APPEND_CONST_DATA("000000000000000000000000000000000000000000000000000000000000000000" as HexString),
+        COMMAND_FINISH(parsedPath),
     ];
 }

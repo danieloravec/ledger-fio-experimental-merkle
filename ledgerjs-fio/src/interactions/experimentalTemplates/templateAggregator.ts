@@ -35,9 +35,7 @@ const aggregateAllTemplates = (): Array<TxIndependentCommandBase> => {
     // TODO be careful about the order of templates. The order will affect the hash tree.
     let templateBases = [
         template_base_trnsfiopubky
-    ].map(templateBase => {
-        return () => templateBase().map(commandInfo => commandInfo.commandBase)
-    });
+    ];
 
     return templateBases.map(base => {
         return [
@@ -275,7 +273,7 @@ const fillMerkleHashesToTree = (root: MerkleNodeWithoutHash): MerkleNode => {
 }
 
 const buildMerkleTreeFromCommands = (commands: Array<TxIndependentCommandBase>): MerkleNode => {
-    // First we need to add padding to "command" levels, so that the number of "leafs" in ich subtree is a power of 2
+    // First we need to add padding to "command" levels, so that the number of "leafs" in each subtree is a power of 2
     const paddedCommands = addPaddingToCommands(commands);
     const treeBase = buildPlainTreeFromPaddedCommands(paddedCommands);
     const treeWithDfsIds = addDfsIdsToTree(treeBase);
